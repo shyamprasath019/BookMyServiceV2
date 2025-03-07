@@ -1,0 +1,179 @@
+/* src/styles/responsive.css - Responsive adjustments */
+
+/* Small screens (mobile) */
+@media (max-width: 640px) {
+    .container {
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+    
+    .hero-content {
+      padding: 4rem 1rem;
+    }
+    
+    .hero-title {
+      font-size: 2rem;
+    }
+    
+    .hero-subtitle {
+      font-size: 1.125rem;
+    }
+    
+    .search-box {
+      margin-top: 1rem;
+    }
+    
+    .messages-container {
+      flex-direction: column;
+    }
+    
+    .conversation-list {
+      width: 100%;
+      height: 300px;
+      border-right: none;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .gig-card-grid {
+      grid-template-columns: 1fr;
+    }
+    
+    .category-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .dashboard-stats-grid {
+      grid-template-columns: 1fr;
+    }
+    
+    .dashboard-tab {
+      padding: 0.75rem 1rem;
+      font-size: 0.875rem;
+    }
+    
+    .order-action-button {
+      font-size: 0.875rem;
+    }
+    
+    .footer-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  
+  /* Medium screens (tablets) */
+  @media (min-width: 641px) and (max-width: 1024px) {
+    .gig-card-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .category-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+    
+    .dashboard-stats-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+  
+  /* Specific element adjustments */
+  @media (max-width: 768px) {
+    .order-card-header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    
+    .order-card-date {
+      margin-top: 0.5rem;
+    }
+    
+    .gig-details-container {
+      flex-direction: column;
+    }
+    
+    .gig-details-main {
+      width: 100%;
+      margin-right: 0;
+      margin-bottom: 2rem;
+    }
+    
+    .gig-details-sidebar {
+      width: 100%;
+    }
+    
+    .dashboard-table {
+      display: block;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    
+    .message {
+      max-width: 85%;
+    }
+    
+    .auth-card {
+      padding: 1.5rem;
+    }
+  }
+  
+  /* Large screens adjustments */
+  @media (min-width: 1280px) {
+    .container {
+      max-width: 1280px;
+    }
+    
+    .hero-content {
+      max-width: 800px;
+    }
+    
+    .gig-card-grid {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+  
+  /* Dark mode support (optional) */
+  @media (prefers-color-scheme: dark) {
+    body {
+      background-color: #1f2937;
+      color: #e5e7eb;
+    }
+    
+    .card, .auth-card, .dashboard-card, .gig-card, .job-card, .order-card {
+      background-color: #374151;
+      color: #e5e7eb;
+    }
+    
+    .input, .form-input, .auth-input, .chat-input {
+      background-color: #4b5563;
+      color: #e5e7eb;
+      border-color: #6b7280;
+    }
+    
+    .input:focus, .form-input:focus, .auth-input:focus, .chat-input:focus {
+      border-color: #60a5fa;
+    }
+    
+    .navbar, .footer {
+      background-color: #111827;
+    }
+    
+    .text-gray-700 {
+      color: #e5e7eb;
+    }
+    
+    .border-gray-200 {
+      border-color: #4b5563;
+    }
+    
+    .bg-gray-100 {
+      background-color: #374151;
+    }
+    
+    .bg-white {
+      background-color: #1f2937;
+    }
+    
+    .message-received .message-bubble {
+      background-color: #4b5563;
+      color: #e5e7eb;
+    }
+  }
