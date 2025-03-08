@@ -18,6 +18,19 @@ router.post('/', verifyToken, isFreelancer, async (req, res, next) => {
   }
 });
 
+// Get gigs created by the current freelancer
+router.get('/my-gigs', verifyToken, isFreelancer, async (req, res, next) => {
+  try {
+    const gigs = await Gig.find({ owner: req.user.id })
+      .sort({ createdAt: -1 })
+      .exec();
+    
+    res.status(200).json(gigs);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Get all gigs (with filtering)
 router.get('/', async (req, res, next) => {
   try {

@@ -19,6 +19,19 @@ router.post('/', verifyToken, isClient, async (req, res, next) => {
   }
 });
 
+// Get jobs posted by the current client
+router.get('/my-jobs', verifyToken, isClient, async (req, res, next) => {
+  try {
+    const jobs = await Job.find({ client: req.user.id })
+      .sort({ createdAt: -1 })
+      .exec();
+    
+    res.status(200).json(jobs);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Get all jobs (with filtering)
 router.get('/', async (req, res, next) => {
   try {
@@ -73,21 +86,6 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-// // Get jobs for the current user
-// router.get('/my-jobs', verifyToken, async (req, res, next) => {
-//   try {
-//     console.log('Fetching jobs for user:', req.user); // Debug log
-
-//     const jobs = await Job.find({ client: req.user.id });
-
-//     console.log('Jobs found:', jobs);
-//     res.status(200).json(jobs);
-//   } catch (err) {
-//     console.error('Error fetching my jobs:', err); // Full error log
-//     res.status(500).json({ message: 'Internal Server Error', error: err.message });
-//   }
-// });
-
 
 // Update a job (owner only)
 router.put('/:id', verifyToken, isClient, async (req, res, next) => {
@@ -137,6 +135,7 @@ router.delete('/:id', verifyToken, isClient, async (req, res, next) => {
   }
 });
 
+
 // Place a bid on a job (freelancers only)
 router.post('/:id/bids', verifyToken, isFreelancer, async (req, res, next) => {
   try {
@@ -177,6 +176,20 @@ router.post('/:id/bids', verifyToken, isFreelancer, async (req, res, next) => {
   }
 });
 
+// Get bids for the current user (freelancer only)
+router.get('/my-bids', verifyToken, isFreelancer, async (req, res, next) => {
+  try {
+    const bids = await Bid.find({ freelancer: req.user.id })
+      .populate('job')
+      .sort({ createdAt: -1 })
+      .exec();
+    
+    res.status(200).json(bids);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Get all bids for a job (job owner only)
 router.get('/:id/bids', verifyToken, async (req, res, next) => {
   try {
@@ -201,5 +214,6 @@ router.get('/:id/bids', verifyToken, async (req, res, next) => {
     next(err);
   }
 });
+
 
 module.exports = router;
