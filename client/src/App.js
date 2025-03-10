@@ -18,7 +18,8 @@ import OrderDetails from './pages/OrderDetails';
 import Profile from './pages/Profile';
 import Messages from './pages/Messages';
 import Conversation from './pages/Conversation';
-
+import EditJob from './pages/EditJob';
+import EditGig from './pages/EditGig';
 // Components
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
@@ -36,8 +37,11 @@ function App() {
               <Route path="/register" element={<Register />} />
               <Route path="/gigs" element={<GigsList />} />
               <Route path="/gigs/:id" element={<GigDetails />} />
+              <Route path="/gigs/:id/edit" element={<PrivateRoute><EditGig /></PrivateRoute>} />
               <Route path="/jobs" element={<JobsList />} />
               <Route path="/jobs/:id" element={<JobDetails />} />
+              <Route path="/jobs/:id/edit" element={<PrivateRoute><EditJob /></PrivateRoute>} />
+              
               
               <Route path="/dashboard" element={
                 <PrivateRoute>

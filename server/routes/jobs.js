@@ -32,6 +32,116 @@ router.get('/my-jobs', verifyToken, isClient, async (req, res, next) => {
   }
 });
 
+// Get bids for the current user (freelancer only)
+router.get('/my-bids', verifyToken, isFreelancer, async (req, res, next) => {
+  try {
+    const bids = await Bid.find({ freelancer: req.user.id })
+      .populate('job')
+      .sort({ createdAt: -1 })
+      .exec();
+    
+    res.status(200).json(bids);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch('/:id/bids/:bidId/reject', verifyToken, isClient, async (req, res, next) => {
+  try {
+    const job = await Job.findById(req.params.id);
+    
+    if (!job) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+    
+    // Check if user is the job owner
+    if (job.client.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'You can only manage bids for your own jobs' });
+    }
+    
+    const bid = await Bid.findById(req.params.bidId);
+    
+    if (!bid) {
+      return res.status(404).json({ message: 'Bid not found' });
+    }
+    
+    // Check if bid belongs to this job
+    if (bid.job.toString() !== req.params.id) {
+      return res.status(400).json({ message: 'Bid does not belong to this job' });
+    }
+    
+    // Update bid status to rejected
+    bid.status = 'rejected';
+    await bid.save();
+    
+    res.status(200).json({ message: 'Bid rejected successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get freelancer's own bid for a job
+router.get('/:id/bids/my-bid', verifyToken, isFreelancer, async (req, res, next) => {
+  try {
+    const job = await Job.findById(req.params.id);
+    
+    if (!job) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+    
+    const bid = await Bid.findOne({
+      job: req.params.id,
+      freelancer: req.user.id
+    }).populate('freelancer', 'username profileImage avgRating');
+    
+    if (!bid) {
+      return res.status(404).json({ message: 'Bid not found' });
+    }
+    
+    res.status(200).json(bid);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Delete (withdraw) a bid (freelancer only)
+router.delete('/:id/bids/:bidId', verifyToken, isFreelancer, async (req, res, next) => {
+  try {
+    const bid = await Bid.findById(req.params.bidId);
+    
+    if (!bid) {
+      return res.status(404).json({ message: 'Bid not found' });
+    }
+    
+    // Check if user is the bid owner
+    if (bid.freelancer.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'You can only withdraw your own bids' });
+    }
+    
+    // Check if bid belongs to this job
+    if (bid.job.toString() !== req.params.id) {
+      return res.status(400).json({ message: 'Bid does not belong to this job' });
+    }
+    
+    // Check if bid is still pending
+    if (bid.status !== 'pending') {
+      return res.status(400).json({ message: 'Cannot withdraw bids that are already accepted or rejected' });
+    }
+    
+    // Delete the bid
+    await Bid.findByIdAndDelete(req.params.bidId);
+    
+    // Update job's bid count
+    await Job.findByIdAndUpdate(req.params.id, {
+      $inc: { totalBids: -1 }
+    });
+    
+    res.status(200).json({ message: 'Bid withdrawn successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Get all jobs (with filtering)
 router.get('/', async (req, res, next) => {
   try {
@@ -171,20 +281,6 @@ router.post('/:id/bids', verifyToken, isFreelancer, async (req, res, next) => {
     });
     
     res.status(201).json(savedBid);
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Get bids for the current user (freelancer only)
-router.get('/my-bids', verifyToken, isFreelancer, async (req, res, next) => {
-  try {
-    const bids = await Bid.find({ freelancer: req.user.id })
-      .populate('job')
-      .sort({ createdAt: -1 })
-      .exec();
-    
-    res.status(200).json(bids);
   } catch (err) {
     next(err);
   }

@@ -436,6 +436,18 @@ const Dashboard = () => {
                             Edit
                           </Link>
                           <button
+                            onClick={async () => {
+                              try {
+                                await api.put(`/gigs/${gig._id}`, {
+                                  isActive: !gig.isActive
+                                });
+                                // Refresh gigs data after toggling active status
+                                const gigsResponse = await api.get('/gigs/my-gigs');
+                                setGigs(gigsResponse.data);
+                              } catch (err) {
+                                console.error('Error toggling gig status:', err);
+                              }
+                            }}
                             className={`px-3 py-1 rounded text-sm ${
                               gig.isActive
                                 ? 'bg-red-100 text-red-600'
@@ -449,6 +461,7 @@ const Dashboard = () => {
                     </div>
                   </div>
                 ))}
+
               </div>
             ) : (
               <div className="text-center py-8">
@@ -486,7 +499,7 @@ const Dashboard = () => {
                       <th className="py-2 px-4 text-left">Bids</th>
                       <th className="py-2 px-4 text-left">Status</th>
                       <th className="py-2 px-4 text-left">Date Posted</th>
-                      <th className="py-2 px-4 text-left">Actions</th>
+                      <th className="py-2 px-4 text-left">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -519,12 +532,12 @@ const Dashboard = () => {
                             >
                               View
                             </Link>
-                            <Link 
+                            {/* <Link 
                               to={`/jobs/${job._id}/edit`}
                               className="text-green-500 hover:underline"
                             >
                               Edit
-                            </Link>
+                            </Link> */}
                           </div>
                         </td>
                       </tr>

@@ -3,6 +3,7 @@ import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import api from '../utils/api';
+import { Link } from 'react-router-dom';
 
 const CreateJob = () => {
   const { currentUser } = useContext(AuthContext);
@@ -18,12 +19,24 @@ const CreateJob = () => {
       max: ''
     },
     deadline: '',
-    skills: ''
+    skills: '',
+    attachments: []
   });
   
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
+  // Add this new function for handling file uploads:
+  const handleFileChange = (e) => {
+    // In a real implementation, this would handle file uploads
+    // For prototype, we'll just store the file names
+    const files = Array.from(e.target.files);
+    setFormData({
+      ...formData,
+      attachments: files.map(file => file.name)
+    });
+  };
+
   // Mock categories (same as in CreateGig)
   const categories = [
     { id: 'technical', name: 'Technical Services', subCategories: ['Web Development', 'Mobile Apps', 'Software', 'IT Support'] },
@@ -86,7 +99,8 @@ const CreateJob = () => {
           min: parseInt(formData.budget.min),
           max: parseInt(formData.budget.max)
         },
-        skills: skillsArray
+        skills: skillsArray,
+        attachments: formData.attachments
       };
       
       // Create job
@@ -282,6 +296,25 @@ const CreateJob = () => {
           >
             Cancel
           </button>
+
+          <div className="mb-6">
+            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="attachments">
+              Job Images/Attachments
+            </label>
+            <input
+              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+              type="file"
+              id="attachments"
+              name="attachments"
+              onChange={handleFileChange}
+              multiple
+              accept="image/*"
+            />
+            <p className="mt-1 text-sm text-gray-500">
+              Upload up to 5 images that illustrate your project requirements. (For prototype, files won't be uploaded)
+            </p>
+          </div>
+
           <button
             type="submit"
             className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline"

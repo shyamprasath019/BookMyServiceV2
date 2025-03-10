@@ -31,6 +31,68 @@ router.get('/my-gigs', verifyToken, isFreelancer, async (req, res, next) => {
   }
 });
 
+router.put('/:id', verifyToken, async (req, res, next) => {
+  try {
+    const gig = await Gig.findById(req.params.id);
+    
+    if (!gig) {
+      return res.status(404).json({ message: 'Gig not found' });
+    }
+    
+    // Check if user is the owner
+    if (gig.owner.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'You can only update your own gigs' });
+    }
+    
+    // Handle activation/deactivation request
+    if (req.body.hasOwnProperty('isActive') && Object.keys(req.body).length === 1) {
+      // If only updating isActive status
+      const updatedGig = await Gig.findByIdAndUpdate(
+        req.params.id,
+        { $set: { isActive: req.body.isActive } },
+        { new: true }
+      );
+      
+      return res.status(200).json(updatedGig);
+    }
+    
+    // Handle full update
+    const updatedGig = await Gig.findByIdAndUpdate(
+      req.params.id,
+      { $set: req.body },
+      { new: true }
+    );
+    
+    res.status(200).json(updatedGig);
+  } catch (err) {
+    next(err);
+  }
+});
+
+
+router.patch('/:id/toggle-active', verifyToken, async (req, res, next) => {
+  try {
+    const gig = await Gig.findById(req.params.id);
+    
+    if (!gig) {
+      return res.status(404).json({ message: 'Gig not found' });
+    }
+    
+    // Check if user is the owner
+    if (gig.owner.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'You can only update your own gigs' });
+    }
+    
+    // Toggle isActive status
+    gig.isActive = !gig.isActive;
+    const updatedGig = await gig.save();
+    
+    res.status(200).json(updatedGig);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Get all gigs (with filtering)
 router.get('/', async (req, res, next) => {
   try {
