@@ -21,18 +21,50 @@ const verifyToken = (req, res, next) => {
   }
 };
 
-const isFreelancer = (req, res, next) => {
+// Verify active role is freelancer
+const isActiveFreelancer = (req, res, next) => {
+  if (!req.user.roles.includes('freelancer') || req.user.activeRole !== 'freelancer') {
+    return res.status(403).json({ 
+      message: 'Access denied: You must be logged in as a freelancer to access this resource' 
+    });
+  }
+  next();
+};
+
+// Verify active role is client
+const isActiveClient = (req, res, next) => {
+  if (!req.user.roles.includes('client') || req.user.activeRole !== 'client') {
+    return res.status(403).json({ 
+      message: 'Access denied: You must be logged in as a client to access this resource' 
+    });
+  }
+  next();
+};
+
+// Check if user has freelancer role (regardless of active role)
+const hasFreelancerRole = (req, res, next) => {
   if (!req.user.roles.includes('freelancer')) {
-    return res.status(403).json({ message: 'Access denied: Freelancer role required' });
+    return res.status(403).json({ 
+      message: 'Access denied: Freelancer role required' 
+    });
   }
   next();
 };
 
-const isClient = (req, res, next) => {
+// Check if user has client role (regardless of active role)
+const hasClientRole = (req, res, next) => {
   if (!req.user.roles.includes('client')) {
-    return res.status(403).json({ message: 'Access denied: Client role required' });
+    return res.status(403).json({ 
+      message: 'Access denied: Client role required' 
+    });
   }
   next();
 };
 
-module.exports = { verifyToken, isFreelancer, isClient };
+module.exports = { 
+  verifyToken, 
+  isActiveFreelancer,
+  isActiveClient,
+  hasFreelancerRole,
+  hasClientRole
+};

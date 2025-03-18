@@ -2,10 +2,10 @@
 const router = require('express').Router();
 const Job = require('../models/Job');
 const Bid = require('../models/Bid');
-const { verifyToken, isClient, isFreelancer } = require('../middleware/auth');
+const { verifyToken, isActiveClient , isActiveFreelancer } = require('../middleware/auth');
 
 // Create a new job (clients only)
-router.post('/', verifyToken, isClient, async (req, res, next) => {
+router.post('/', verifyToken, isActiveClient , async (req, res, next) => {
   try {
     const newJob = new Job({
       ...req.body,
@@ -20,7 +20,7 @@ router.post('/', verifyToken, isClient, async (req, res, next) => {
 });
 
 // Get jobs posted by the current client
-router.get('/my-jobs', verifyToken, isClient, async (req, res, next) => {
+router.get('/my-jobs', verifyToken, isActiveClient , async (req, res, next) => {
   try {
     const jobs = await Job.find({ client: req.user.id })
       .sort({ createdAt: -1 })
@@ -33,7 +33,7 @@ router.get('/my-jobs', verifyToken, isClient, async (req, res, next) => {
 });
 
 // Get bids for the current user (freelancer only)
-router.get('/my-bids', verifyToken, isFreelancer, async (req, res, next) => {
+router.get('/my-bids', verifyToken, isActiveFreelancer , async (req, res, next) => {
   try {
     const bids = await Bid.find({ freelancer: req.user.id })
       .populate('job')
@@ -46,7 +46,7 @@ router.get('/my-bids', verifyToken, isFreelancer, async (req, res, next) => {
   }
 });
 
-router.patch('/:id/bids/:bidId/reject', verifyToken, isClient, async (req, res, next) => {
+router.patch('/:id/bids/:bidId/reject', verifyToken, isActiveClient , async (req, res, next) => {
   try {
     const job = await Job.findById(req.params.id);
     
@@ -80,8 +80,114 @@ router.patch('/:id/bids/:bidId/reject', verifyToken, isClient, async (req, res, 
   }
 });
 
+// Get a specific user's bid on a job
+router.get('/:id/my-bid', verifyToken, isActiveFreelancer , async (req, res, next) => {
+  try {
+    const bid = await Bid.findOne({
+      job: req.params.id,
+      freelancer: req.user.id
+    });
+    
+    if (!bid) {
+      return res.status(404).json({ message: 'No bid found for this job' });
+    }
+    
+    res.status(200).json(bid);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Reject a bid
+router.patch('/:id/bids/:bidId/reject', verifyToken, isActiveClient , async (req, res, next) => {
+  try {
+    const job = await Job.findById(req.params.id);
+    
+    if (!job) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+    
+    // Check if user is job owner
+    if (job.client.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'You can only manage bids for your own jobs' });
+    }
+    
+    const bid = await Bid.findById(req.params.bidId);
+    
+    if (!bid) {
+      return res.status(404).json({ message: 'Bid not found' });
+    }
+    
+    // Check if bid belongs to the job
+    if (bid.job.toString() !== req.params.id) {
+      return res.status(400).json({ message: 'Bid does not belong to this job' });
+    }
+    
+    // Update bid status
+    bid.status = 'rejected';
+    await bid.save();
+    
+    res.status(200).json({ message: 'Bid rejected successfully', bid });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Update order routes to create from bid
+router.post('/from-bid/:bidId', verifyToken, isActiveClient , async (req, res, next) => {
+  try {
+    const bid = await Bid.findById(req.params.bidId)
+      .populate('job')
+      .populate('freelancer');
+    
+    if (!bid) {
+      return res.status(404).json({ message: 'Bid not found' });
+    }
+    
+    // Check if user is the job owner
+    if (bid.job.client.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'You can only accept bids for your own jobs' });
+    }
+    
+    // Check if bid is pending
+    if (bid.status !== 'pending') {
+      return res.status(400).json({ message: `Bid is already ${bid.status}` });
+    }
+    
+    // Create new order
+    const newOrder = new Order({
+      client: req.user.id,
+      freelancer: bid.freelancer._id,
+      job: bid.job._id,
+      bid: bid._id,
+      title: bid.job.title,
+      description: bid.job.description,
+      price: bid.amount,
+      deliveryTime: bid.deliveryTime,
+      deadline: bid.job.deadline || new Date(Date.now() + bid.deliveryTime * 24 * 60 * 60 * 1000)
+    });
+    
+    const savedOrder = await newOrder.save();
+    
+    // Update bid status
+    bid.status = 'accepted';
+    await bid.save();
+    
+    // Set job's selected bid and mark as in progress
+    await Job.findByIdAndUpdate(bid.job._id, {
+      selectedBid: bid._id,
+      status: 'in_progress',
+      isActive: false
+    });
+    
+    res.status(201).json(savedOrder);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Get freelancer's own bid for a job
-router.get('/:id/bids/my-bid', verifyToken, isFreelancer, async (req, res, next) => {
+router.get('/:id/bids/my-bid', verifyToken, isActiveFreelancer , async (req, res, next) => {
   try {
     const job = await Job.findById(req.params.id);
     
@@ -105,7 +211,7 @@ router.get('/:id/bids/my-bid', verifyToken, isFreelancer, async (req, res, next)
 });
 
 // Delete (withdraw) a bid (freelancer only)
-router.delete('/:id/bids/:bidId', verifyToken, isFreelancer, async (req, res, next) => {
+router.delete('/:id/bids/:bidId', verifyToken, isActiveFreelancer , async (req, res, next) => {
   try {
     const bid = await Bid.findById(req.params.bidId);
     
@@ -198,7 +304,7 @@ router.get('/:id', async (req, res, next) => {
 
 
 // Update a job (owner only)
-router.put('/:id', verifyToken, isClient, async (req, res, next) => {
+router.put('/:id', verifyToken, isActiveClient , async (req, res, next) => {
   try {
     const job = await Job.findById(req.params.id);
     
@@ -224,7 +330,7 @@ router.put('/:id', verifyToken, isClient, async (req, res, next) => {
 });
 
 // Delete a job (owner only)
-router.delete('/:id', verifyToken, isClient, async (req, res, next) => {
+router.delete('/:id', verifyToken, isActiveClient , async (req, res, next) => {
   try {
     const job = await Job.findById(req.params.id);
     
@@ -247,7 +353,7 @@ router.delete('/:id', verifyToken, isClient, async (req, res, next) => {
 
 
 // Place a bid on a job (freelancers only)
-router.post('/:id/bids', verifyToken, isFreelancer, async (req, res, next) => {
+router.post('/:id/bids', verifyToken, isActiveFreelancer , async (req, res, next) => {
   try {
     const job = await Job.findById(req.params.id);
     

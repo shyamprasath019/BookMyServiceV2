@@ -372,6 +372,47 @@ router.put('/role/:role', verifyToken, async (req, res, next) => {
   }
 });
 
+router.post('/activate-freelancer', verifyToken, async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Check if user already has freelancer role
+    if (user.roles.includes('freelancer')) {
+      return res.status(400).json({ message: 'Freelancer account already active' });
+    }
+    
+    // Add freelancer role
+    user.roles.push('freelancer');
+    
+    // Add freelancer details
+    const { bio, skills, hourlyRate, availability, serviceCategories } = req.body;
+    
+    user.bio = bio;
+    user.skills = skills;
+    user.hourlyRate = hourlyRate;
+    user.availability = availability;
+    user.serviceCategories = serviceCategories;
+    
+    // Create initial portfolio array if not exists
+    if (!user.portfolio) {
+      user.portfolio = [];
+    }
+    
+    await user.save();
+    
+    // Return user without password
+    const { password, ...userWithoutPassword } = user._doc;
+    
+    res.status(200).json(userWithoutPassword);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Delete user account
 router.delete('/', verifyToken, async (req, res, next) => {
   try {

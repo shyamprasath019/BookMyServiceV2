@@ -1,3 +1,4 @@
+// File: server/models/Job.js
 const mongoose = require('mongoose');
 
 const JobSchema = new mongoose.Schema({
@@ -34,7 +35,23 @@ const JobSchema = new mongoose.Schema({
   deadline: {
     type: Date
   },
+  location: {
+    type: {
+      type: String,
+      enum: ['remote', 'onsite'],
+      default: 'remote'
+    },
+    address: String,
+    city: String,
+    state: String,
+    country: String,
+    postalCode: String
+  },
   skills: {
+    type: [String],
+    default: []
+  },
+  attachments: {
     type: [String],
     default: []
   },
@@ -46,9 +63,17 @@ const JobSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  attachments: {
-    type: [String],
-    default: []
+  status: {
+    type: String,
+    enum: ['open', 'in_progress', 'completed', 'cancelled'],
+    default: 'open'
+  },
+  selectedBid: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Bid'
+  },
+  completedAt: {
+    type: Date
   }
 }, { timestamps: true });
 

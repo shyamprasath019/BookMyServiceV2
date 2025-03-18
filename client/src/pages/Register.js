@@ -1,16 +1,11 @@
 // File: client/src/pages/Register.js
-import React, { useState, useContext, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useContext } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 
 const Register = () => {
-  const location = useLocation();
   const navigate = useNavigate();
   const { register, error: authError } = useContext(AuthContext);
-  
-  // Get role from query parameters (if any)
-  const queryParams = new URLSearchParams(location.search);
-  const roleFromQuery = queryParams.get('role');
   
   const [formData, setFormData] = useState({
     username: '',
@@ -18,21 +13,12 @@ const Register = () => {
     password: '',
     confirmPassword: '',
     phone: '',
-    roles: roleFromQuery ? [roleFromQuery] : ['client']
+    // Default role is client only
+    roles: ['client']
   });
   
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
-  // Update roles if query parameter changes
-  useEffect(() => {
-    if (roleFromQuery) {
-      setFormData(prev => ({
-        ...prev,
-        roles: [roleFromQuery]
-      }));
-    }
-  }, [roleFromQuery]);
   
   const handleChange = (e) => {
     setFormData({
@@ -41,29 +27,36 @@ const Register = () => {
     });
   };
   
-  const handleRoleChange = (e) => {
-    const role = e.target.value;
-    if (role === 'both') {
-      setFormData({
-        ...formData,
-        roles: ['client', 'freelancer']
-      });
-    } else {
-      setFormData({
-        ...formData,
-        roles: [role]
-      });
-    }
-  };
-  
   const validateForm = () => {
+    // Username validation
+    if (formData.username.length < 3) {
+      setError('Username must be at least 3 characters');
+      return false;
+    }
+    
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setError('Please enter a valid email address');
+      return false;
+    }
+    
+    // Password validation
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return false;
+    }
+    
+    // Password confirmation
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       return false;
     }
     
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters');
+    // Phone validation
+    const phoneRegex = /^\d{10}$/;
+    if (!phoneRegex.test(formData.phone)) {
+      setError('Please enter a valid 10-digit phone number');
       return false;
     }
     
@@ -84,6 +77,8 @@ const Register = () => {
       // Remove confirmPassword before sending to API
       const { confirmPassword, ...registerData } = formData;
       await register(registerData);
+      
+      // Redirect to client dashboard on successful registration
       navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed');
@@ -144,6 +139,7 @@ const Register = () => {
             name="phone"
             value={formData.phone}
             onChange={handleChange}
+            placeholder="10-digit number"
             required
           />
         </div>
@@ -161,9 +157,10 @@ const Register = () => {
             onChange={handleChange}
             required
           />
+          <p className="text-xs text-gray-500 mt-1">Must be at least 6 characters</p>
         </div>
         
-        <div className="mb-4">
+        <div className="mb-6">
           <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="confirmPassword">
             Confirm Password
           </label>
@@ -179,53 +176,9 @@ const Register = () => {
         </div>
         
         <div className="mb-6">
-          <label className="block text-gray-700 text-sm font-bold mb-2">
-            Register as
-          </label>
-          <div className="mt-2">
-            <div className="flex items-center">
-              <input
-                id="client"
-                name="role"
-                type="radio"
-                value="client"
-                checked={formData.roles.length === 1 && formData.roles[0] === 'client'}
-                onChange={handleRoleChange}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500"
-              />
-              <label htmlFor="client" className="ml-2 block text-sm text-gray-700">
-                Client (I want to hire)
-              </label>
-            </div>
-            <div className="flex items-center mt-2">
-              <input
-                id="freelancer"
-                name="role"
-                type="radio"
-                value="freelancer"
-                checked={formData.roles.length === 1 && formData.roles[0] === 'freelancer'}
-                onChange={handleRoleChange}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500"
-              />
-              <label htmlFor="freelancer" className="ml-2 block text-sm text-gray-700">
-                Freelancer (I want to work)
-              </label>
-            </div>
-            <div className="flex items-center mt-2">
-              <input
-                id="both"
-                name="role"
-                type="radio"
-                value="both"
-                checked={formData.roles.length === 2}
-                onChange={handleRoleChange}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500"
-              />
-              <label htmlFor="both" className="ml-2 block text-sm text-gray-700">
-                Both
-              </label>
-            </div>
-          </div>
+          <p className="text-gray-700 text-sm mb-2">
+            By default, your account will be created as a client. You can activate your freelancer account later from your dashboard.
+          </p>
         </div>
         
         <button
@@ -233,7 +186,7 @@ const Register = () => {
           className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
           disabled={isLoading}
         >
-          {isLoading ? 'Creating Account...' : 'Sign Up'}
+          {isLoading ? 'Creating Account...' : 'Create Account'}
         </button>
       </form>
       

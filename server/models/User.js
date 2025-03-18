@@ -30,13 +30,28 @@ const UserSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  // General profile fields
+  bio: {
+    type: String,
+    default: ''
+  },
+  // Freelancer specific fields
   skills: {
     type: [String],
     default: []
   },
-  bio: {
+  hourlyRate: {
+    type: Number,
+    default: 0
+  },
+  availability: {
     type: String,
-    default: ''
+    enum: ['full-time', 'part-time', 'weekends', 'custom'],
+    default: 'full-time'
+  },
+  serviceCategories: {
+    type: [String],
+    default: []
   },
   portfolio: [{
     title: String,
@@ -44,6 +59,56 @@ const UserSchema = new mongoose.Schema({
     imageUrl: String,
     link: String
   }],
+  // Client wallet
+  clientWallet: {
+    balance: {
+      type: Number,
+      default: 0
+    },
+    transactions: [{
+      type: {
+        type: String,
+        enum: ['deposit', 'withdrawal', 'payment', 'refund', 'escrow', 'release']
+      },
+      amount: Number,
+      description: String,
+      relatedOrder: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Order'
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now
+      }
+    }]
+  },
+  // Freelancer wallet
+  freelancerWallet: {
+    balance: {
+      type: Number,
+      default: 0
+    },
+    pendingBalance: {
+      type: Number,
+      default: 0
+    },
+    transactions: [{
+      type: {
+        type: String,
+        enum: ['deposit', 'withdrawal', 'payment', 'release']
+      },
+      amount: Number,
+      description: String,
+      relatedOrder: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Order'
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now
+      }
+    }]
+  },
   avgRating: {
     type: Number,
     default: 0
@@ -52,13 +117,13 @@ const UserSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  location: {
+    type: String,
+    default: ''
+  },
   isVerified: {
     type: Boolean,
     default: false
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
   }
 }, { timestamps: true });
 

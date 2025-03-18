@@ -2,10 +2,10 @@
 const router = require('express').Router();
 const Payment = require('../models/Payment');
 const Order = require('../models/Order');
-const { verifyToken, isClient } = require('../middleware/auth');
+const { verifyToken, hasClientRole } = require('../middleware/auth');
 
 // Create payment for order (client only)
-router.post('/create/:orderId', verifyToken, isClient, async (req, res, next) => {
+router.post('/create/:orderId', verifyToken, hasClientRole, async (req, res, next) => {
   try {
     const order = await Order.findById(req.params.orderId);
     
@@ -82,7 +82,7 @@ router.get('/order/:orderId', verifyToken, async (req, res, next) => {
 });
 
 // Release payment to freelancer (client only, or system on completion)
-router.patch('/release/:orderId', verifyToken, isClient, async (req, res, next) => {
+router.patch('/release/:orderId', verifyToken, hasClientRole, async (req, res, next) => {
   try {
     const order = await Order.findById(req.params.orderId);
     

@@ -6,8 +6,10 @@ import { AuthContext } from '../context/AuthContext';
 const Login = () => {
   const [formData, setFormData] = useState({
     emailOrUsername: '',
-    password: ''
+    password: '',
+    loginAsRole: 'client' // Default login as client
   });
+  
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   
@@ -27,10 +29,14 @@ const Login = () => {
     setError('');
     
     try {
-      await login(formData.emailOrUsername, formData.password);
+      await login(formData.emailOrUsername, formData.password, formData.loginAsRole);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed');
+      if (err.response?.status === 403) {
+        setError(`You don't have an active ${formData.loginAsRole} account. Please log in with a different role or activate this role from your dashboard.`);
+      } else {
+        setError(err.response?.data?.message || 'Login failed');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -75,6 +81,36 @@ const Login = () => {
             onChange={handleChange}
             required
           />
+        </div>
+        
+        <div className="mb-6">
+          <label className="block text-gray-700 text-sm font-bold mb-2">
+            Login as
+          </label>
+          <div className="flex space-x-4">
+            <button
+              type="button"
+              className={`flex-1 py-2 px-4 rounded-lg border ${
+                formData.loginAsRole === 'client' 
+                  ? 'bg-blue-500 text-white border-blue-500' 
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+              onClick={() => setFormData({...formData, loginAsRole: 'client'})}
+            >
+              Client
+            </button>
+            <button
+              type="button"
+              className={`flex-1 py-2 px-4 rounded-lg border ${
+                formData.loginAsRole === 'freelancer' 
+                  ? 'bg-blue-500 text-white border-blue-500' 
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+              onClick={() => setFormData({...formData, loginAsRole: 'freelancer'})}
+            >
+              Freelancer
+            </button>
+          </div>
         </div>
         
         <button

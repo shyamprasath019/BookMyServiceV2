@@ -59,41 +59,52 @@ router.post('/register', [
 // Login route
 router.post('/login', async (req, res, next) => {
   try {
+    const { emailOrUsername, password, role } = req.body;
+    
     // Find user
     const user = await User.findOne({ 
-      $or: [{ email: req.body.emailOrUsername }, { username: req.body.emailOrUsername }] 
+      $or: [{ email: emailOrUsername }, { username: emailOrUsername }] 
     });
-
-    console.log('User found:', user);
     
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
     // Check password
-    const isPasswordCorrect = await user.comparePassword(req.body.password);
+    const isPasswordCorrect = await user.comparePassword(password);
     
-    console.log('Password check result:', isPasswordCorrect);
-
     if (!isPasswordCorrect) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
+    
+    // Check if user has the requested role
+    if (role && !user.roles.includes(role)) {
+      return res.status(403).json({ 
+        message: `You don't have an active ${role} account. Please activate this role in your settings.` 
+      });
+    }
 
-    // Create JWT token
+    // Create JWT token with active role
     const token = jwt.sign(
-      { id: user._id, roles: user.roles },
+      { 
+        id: user._id, 
+        roles: user.roles,
+        activeRole: role || user.roles[0] // Default to first role if none specified
+      },
       process.env.JWT_SECRET,
       { expiresIn: '1d' }
     );
 
     // Return user without password
-    const { password, ...userWithoutPassword } = user._doc;
+    const { password: pwd, ...userWithoutPassword } = user._doc;
     
-    res.status(200).json({ user: userWithoutPassword, token });
+    res.status(200).json({ 
+      user: userWithoutPassword, 
+      token,
+      activeRole: role || user.roles[0]
+    });
   } catch (err) {
-    //next(err);
-    console.error('Login route error:', err); // 🔴 Full error message
-    res.status(500).json({ message: 'Internal Server Error', error: err.message });
+    next(err);
   }
 });
 

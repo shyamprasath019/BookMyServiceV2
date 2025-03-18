@@ -3,10 +3,9 @@ import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import api from '../utils/api';
-import { Link } from 'react-router-dom';
 
 const CreateJob = () => {
-  const { currentUser } = useContext(AuthContext);
+  const { currentUser, activeRole } = useContext(AuthContext);
   const navigate = useNavigate();
   
   const [formData, setFormData] = useState({
@@ -20,24 +19,22 @@ const CreateJob = () => {
     },
     deadline: '',
     skills: '',
+    location: {
+      type: 'remote', // remote or onsite
+      address: '',
+      city: '',
+      state: '',
+      country: '',
+      postalCode: ''
+    },
     attachments: []
   });
   
+  const [images, setImages] = useState([]);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
-  // Add this new function for handling file uploads:
-  const handleFileChange = (e) => {
-    // In a real implementation, this would handle file uploads
-    // For prototype, we'll just store the file names
-    const files = Array.from(e.target.files);
-    setFormData({
-      ...formData,
-      attachments: files.map(file => file.name)
-    });
-  };
-
-  // Mock categories (same as in CreateGig)
+  // Categories
   const categories = [
     { id: 'technical', name: 'Technical Services', subCategories: ['Web Development', 'Mobile Apps', 'Software', 'IT Support'] },
     { id: 'design', name: 'Design & Creative', subCategories: ['Graphics & Design', 'Logo Design', 'Video Editing'] },
@@ -68,6 +65,16 @@ const CreateJob = () => {
           [name === 'minBudget' ? 'min' : 'max']: value
         }
       });
+    } else if (name.startsWith('location.')) {
+      // Handle nested location object
+      const locationField = name.split('.')[1];
+      setFormData({
+        ...formData,
+        location: {
+          ...formData.location,
+          [locationField]: value
+        }
+      });
     } else {
       setFormData({
         ...formData,
@@ -76,17 +83,81 @@ const CreateJob = () => {
     }
   };
   
+  const handleLocationTypeChange = (type) => {
+    setFormData({
+      ...formData,
+      location: {
+        ...formData.location,
+        type
+      }
+    });
+  };
+  
+  const handleImageChange = (e) => {
+    const files = Array.from(e.target.files);
+    
+    // For a real app, you would upload these to a server
+    // For this prototype, we'll just store the file objects
+    setImages(files);
+    
+    // Create array of file names for form data
+    const fileNames = files.map(file => file.name);
+    setFormData({
+      ...formData,
+      attachments: fileNames
+    });
+  };
+  
+  const validateForm = () => {
+    // Title validation
+    if (formData.title.trim().length < 10) {
+      setError('Title should be at least 10 characters long');
+      return false;
+    }
+    
+    // Description validation
+    if (formData.description.trim().length < 30) {
+      setError('Description should be at least 30 characters long');
+      return false;
+    }
+    
+    // Category validation
+    if (!formData.category) {
+      setError('Please select a category');
+      return false;
+    }
+    
+    // Budget validation
+    if (!formData.budget.min || !formData.budget.max) {
+      setError('Please provide both minimum and maximum budget');
+      return false;
+    }
+    
+    if (parseFloat(formData.budget.min) > parseFloat(formData.budget.max)) {
+      setError('Minimum budget cannot be greater than maximum budget');
+      return false;
+    }
+    
+    // Location validation for onsite jobs
+    if (formData.location.type === 'onsite') {
+      if (!formData.location.city || !formData.location.country) {
+        setError('Please provide at least city and country for onsite jobs');
+        return false;
+      }
+    }
+    
+    return true;
+  };
+  
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
-    setError('');
     
-    // Validate min/max budget
-    if (parseInt(formData.budget.min) > parseInt(formData.budget.max)) {
-      setError('Minimum budget cannot be greater than maximum budget');
-      setIsLoading(false);
+    if (!validateForm()) {
       return;
     }
+    
+    setIsLoading(true);
+    setError('');
     
     try {
       // Convert skills from string to array
@@ -96,12 +167,14 @@ const CreateJob = () => {
       const jobData = {
         ...formData,
         budget: {
-          min: parseInt(formData.budget.min),
-          max: parseInt(formData.budget.max)
+          min: parseFloat(formData.budget.min),
+          max: parseFloat(formData.budget.max)
         },
-        skills: skillsArray,
-        attachments: formData.attachments
+        skills: skillsArray
       };
+      
+      // For a real app, you would handle file uploads here
+      // For this prototype, we'll just send the job data
       
       // Create job
       const response = await api.post('/jobs', jobData);
@@ -114,8 +187,26 @@ const CreateJob = () => {
     }
   };
   
+  // Check if user is client
+  if (activeRole !== 'client') {
+    return (
+      <div className="max-w-3xl mx-auto mt-20 bg-white p-8 border border-gray-300 rounded-lg shadow-md">
+        <div className="text-center">
+          <h2 className="text-xl font-bold text-red-600 mb-4">Access Denied</h2>
+          <p className="mb-4">You need to be logged in as a client to post jobs.</p>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+          >
+            Go to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+  
   return (
-    <div className="max-w-3xl mx-auto bg-white p-8 border border-gray-300 rounded-lg shadow-md">
+    <div className="max-w-3xl mx-auto mt-20 bg-white p-8 border border-gray-300 rounded-lg shadow-md">
       <h1 className="text-2xl font-bold mb-6">Post a New Job</h1>
       
       {error && (
@@ -140,7 +231,7 @@ const CreateJob = () => {
             required
           />
           <p className="mt-1 text-sm text-gray-500">
-            Create a clear title that describes what you need.
+            Create a clear title that describes what you need (min. 10 characters).
           </p>
         </div>
         
@@ -159,7 +250,7 @@ const CreateJob = () => {
             required
           ></textarea>
           <p className="mt-1 text-sm text-gray-500">
-            Provide detailed information about your project, requirements, and expectations.
+            Provide detailed information about your project, requirements, and expectations (min. 30 characters).
           </p>
         </div>
         
@@ -214,14 +305,14 @@ const CreateJob = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <div>
             <label className="block text-gray-700 text-sm font-bold mb-2">
-              Budget Range (USD)
+              Budget Range (BMS Tokens)
             </label>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <div className="relative">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">$</span>
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">BMS</span>
                   <input
-                    className="w-full pl-8 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                    className="w-full pl-12 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
                     type="number"
                     id="minBudget"
                     name="minBudget"
@@ -236,9 +327,9 @@ const CreateJob = () => {
               </div>
               <div>
                 <div className="relative">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">$</span>
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">BMS</span>
                   <input
-                    className="w-full pl-8 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                    className="w-full pl-12 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
                     type="number"
                     id="maxBudget"
                     name="maxBudget"
@@ -288,33 +379,152 @@ const CreateJob = () => {
           </p>
         </div>
         
+        <div className="mb-6">
+          <label className="block text-gray-700 text-sm font-bold mb-2">
+            Location
+          </label>
+          <div className="flex space-x-4 mb-4">
+            <div className="flex items-center">
+              <input
+                type="radio"
+                id="remote"
+                checked={formData.location.type === 'remote'}
+                onChange={() => handleLocationTypeChange('remote')}
+                className="mr-2"
+              />
+              <label htmlFor="remote">Remote Work</label>
+            </div>
+            <div className="flex items-center">
+              <input
+                type="radio"
+                id="onsite"
+                checked={formData.location.type === 'onsite'}
+                onChange={() => handleLocationTypeChange('onsite')}
+                className="mr-2"
+              />
+              <label htmlFor="onsite">On-site Work</label>
+            </div>
+          </div>
+          
+          {formData.location.type === 'onsite' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="location.address">
+                  Address (Optional)
+                </label>
+                <input
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                  type="text"
+                  id="location.address"
+                  name="location.address"
+                  value={formData.location.address}
+                  onChange={handleChange}
+                  placeholder="Street address"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="location.city">
+                  City
+                </label>
+                <input
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                  type="text"
+                  id="location.city"
+                  name="location.city"
+                  value={formData.location.city}
+                  onChange={handleChange}
+                  placeholder="City"
+                  required={formData.location.type === 'onsite'}
+                />
+              </div>
+              <div>
+                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="location.state">
+                  State/Province (Optional)
+                </label>
+                <input
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                  type="text"
+                  id="location.state"
+                  name="location.state"
+                  value={formData.location.state}
+                  onChange={handleChange}
+                  placeholder="State or province"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="location.country">
+                  Country
+                </label>
+                <input
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                  type="text"
+                  id="location.country"
+                  name="location.country"
+                  value={formData.location.country}
+                  onChange={handleChange}
+                  placeholder="Country"
+                  required={formData.location.type === 'onsite'}
+                />
+              </div>
+              <div>
+                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="location.postalCode">
+                  Postal Code (Optional)
+                </label>
+                <input
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                  type="text"
+                  id="location.postalCode"
+                  name="location.postalCode"
+                  value={formData.location.postalCode}
+                  onChange={handleChange}
+                  placeholder="Postal or ZIP code"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+        
+        <div className="mb-6">
+          <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="images">
+            Attachments / Images
+          </label>
+          <input
+            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+            type="file"
+            id="images"
+            name="images"
+            onChange={handleImageChange}
+            accept="image/*"
+            multiple
+          />
+          <p className="mt-1 text-sm text-gray-500">
+            Upload images to help describe your job (optional). Maximum 5 images, 5MB each.
+          </p>
+          
+          {/* Image preview */}
+          {images.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {images.map((file, index) => (
+                <div key={index} className="w-20 h-20 relative bg-gray-100 rounded">
+                  <img
+                    src={URL.createObjectURL(file)}
+                    alt={`Preview ${index}`}
+                    className="w-full h-full object-cover rounded"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        
         <div className="flex items-center justify-end mt-8">
           <button
             type="button"
             className="mr-4 text-gray-600 hover:text-gray-800"
-            onClick={() => navigate(-1)}
+            onClick={() => navigate('/dashboard')}
           >
             Cancel
           </button>
-
-          <div className="mb-6">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="attachments">
-              Job Images/Attachments
-            </label>
-            <input
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-              type="file"
-              id="attachments"
-              name="attachments"
-              onChange={handleFileChange}
-              multiple
-              accept="image/*"
-            />
-            <p className="mt-1 text-sm text-gray-500">
-              Upload up to 5 images that illustrate your project requirements. (For prototype, files won't be uploaded)
-            </p>
-          </div>
-
           <button
             type="submit"
             className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline"

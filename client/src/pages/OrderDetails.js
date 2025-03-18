@@ -3,15 +3,17 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import api from '../utils/api';
+import PaymentForm from '../components/PaymentForm';
 
 const OrderDetails = () => {
   const { id } = useParams();
-  const { currentUser } = useContext(AuthContext);
+  const { currentUser, activeRole } = useContext(AuthContext);
   const navigate = useNavigate();
   
   const [order, setOrder] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
   
   // Delivery form
   const [deliveryForm, setDeliveryForm] = useState({
@@ -48,7 +50,6 @@ const OrderDetails = () => {
     }
   };
   
-  // File: client/src/pages/OrderDetails.js (continued)
   const handleDeliveryFormChange = (e) => {
     const { name, value } = e.target;
     setDeliveryForm(prev => ({
@@ -128,36 +129,28 @@ const OrderDetails = () => {
     }
   };
   
-  const handlePayment = async () => {
-    try {
-      // For prototype, we'll use a mock payment
-      const mockPaymentData = {
-        paymentMethod: 'credit_card',
-        transactionId: 'mock_' + Date.now()
-      };
-      
-      await api.post(`/payments/create/${id}`, mockPaymentData);
-      
-      // Refresh order data
-      fetchOrderDetails();
-    } catch (err) {
-      setError('Failed to process payment');
-    }
+  const handlePaymentComplete = (updatedOrder) => {
+    setOrder(updatedOrder);
+    setShowPaymentForm(false);
   };
   
   const handleReleasePayment = async () => {
     try {
-      await api.patch(`/payments/release/${id}`);
-      
-      // Refresh order data
+      const response = await api.post(`/wallet/release/${id}`);
       fetchOrderDetails();
+      alert('Payment released successfully!');
     } catch (err) {
-      setError('Failed to release payment');
+      setError(err.response?.data?.message || 'Failed to release payment');
     }
   };
   
   if (isLoading) {
-    return <div className="text-center py-8">Loading order details...</div>;
+    return (
+      <div className="flex justify-center items-center py-12">
+        <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+        <p className="ml-2">Loading order details...</p>
+      </div>
+    );
   }
   
   if (error || !order) {
@@ -174,8 +167,8 @@ const OrderDetails = () => {
   }
   
   // Determine user role in this order
-  const isClient = currentUser._id === order.client._id;
-  const isFreelancer = currentUser._id === order.freelancer._id;
+  const isClient = activeRole === 'client';
+  const isFreelancer = activeRole === 'freelancer';
   
   // Check if user has already submitted a review
   const hasReviewed = isClient 
@@ -206,11 +199,11 @@ const OrderDetails = () => {
             <div>
               <h2 className="text-2xl font-bold mb-1">{order.title}</h2>
               <div className="text-gray-600 mb-4">
-                {order.gig ? 'Gig Order' : 'Custom Job'}
+                {order.gig ? 'Gig Order' : 'Job Bid Order'}
               </div>
             </div>
             <div className="text-right">
-              <div className="font-bold text-2xl">${order.price.toFixed(2)}</div>
+              <div className="font-bold text-2xl">BMS {order.price.toFixed(2)}</div>
               <div className="text-gray-500">
                 Delivery: {order.deliveryTime} days
               </div>
@@ -316,17 +309,23 @@ const OrderDetails = () => {
               {/* Payment Section */}
               {order.paymentStatus === 'pending' && (
                 <div>
-                  <div className="bg-yellow-50 border border-yellow-200 p-4 rounded mb-4">
-                    <p className="text-yellow-800">
-                      Payment is required to start this order. Your payment will be held in escrow until the order is completed.
-                    </p>
-                  </div>
-                  <button
-                    onClick={handlePayment}
-                    className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"
-                  >
-                    Pay Now (${order.price.toFixed(2)})
-                  </button>
+                  {showPaymentForm ? (
+                    <PaymentForm order={order} onPaymentComplete={handlePaymentComplete} />
+                  ) : (
+                    <div>
+                      <div className="bg-yellow-50 border border-yellow-200 p-4 rounded mb-4">
+                        <p className="text-yellow-800">
+                          Payment is required to start this order. Your payment will be held in escrow until the order is completed.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setShowPaymentForm(true)}
+                        className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"
+                      >
+                        Pay Now (BMS {order.price.toFixed(2)})
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
               
@@ -340,10 +339,10 @@ const OrderDetails = () => {
                   </div>
                   <div className="flex space-x-4">
                     <button
-                      onClick={() => handleStatusChange('completed')}
+                      onClick={handleReleasePayment}
                       className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"
                     >
-                      Accept & Complete Order
+                      Accept & Release Payment
                     </button>
                     <button
                       onClick={() => handleStatusChange('in_progress')}
@@ -377,7 +376,7 @@ const OrderDetails = () => {
                 <div>
                   <div className="bg-blue-50 border border-blue-200 p-4 rounded mb-4">
                     <p className="text-blue-800">
-                      New order received! Accept it to start working.
+                      New order received with payment in escrow! Accept it to start working.
                     </p>
                   </div>
                   <button
@@ -433,7 +432,7 @@ const OrderDetails = () => {
                         multiple
                       />
                       <p className="mt-1 text-sm text-gray-500">
-                        Upload files related to your delivery. (For prototype, files won't be uploaded)
+                        Upload files related to your delivery.
                       </p>
                     </div>
                     

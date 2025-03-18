@@ -1,33 +1,23 @@
-// In JobDetails.js, modify the component to display different views based on user role
-
+// File: client/src/pages/JobDetails.js
 import React, { useState, useEffect, useContext } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import BidForm from '../components/BidForm';
 import api from '../utils/api';
 
 const JobDetails = () => {
   const { id } = useParams();
-  const { currentUser } = useContext(AuthContext);
+  const { currentUser, activeRole } = useContext(AuthContext);
   const navigate = useNavigate();
   
   const [job, setJob] = useState(null);
   const [bids, setBids] = useState([]);
+  const [userBid, setUserBid] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   
-  // Bid form
-  const [bidForm, setBidForm] = useState({
-    amount: '',
-    deliveryTime: '',
-    proposal: ''
-  });
-  const [isBidding, setIsBidding] = useState(false);
-  const [bidError, setBidError] = useState('');
-  const [bidSuccess, setBidSuccess] = useState('');
-  
   useEffect(() => {
     fetchJobDetails();
-    fetchUserBid()
   }, [id]);
   
   const fetchJobDetails = async () => {
@@ -36,94 +26,76 @@ const JobDetails = () => {
       const jobResponse = await api.get(`/jobs/${id}`);
       setJob(jobResponse.data);
       
-      // If current user is job owner or an admin, fetch bids
-      if (currentUser && (jobResponse.data.client._id === currentUser._id)) {
+      // If current user is job owner, fetch all bids
+      if (currentUser && jobResponse.data.client._id === currentUser._id && activeRole === 'client') {
         const bidsResponse = await api.get(`/jobs/${id}/bids`);
         setBids(bidsResponse.data);
       }
+      
+      // If current user is a freelancer, check if they have already bid
+      if (currentUser && activeRole === 'freelancer') {
+        try {
+          const userBidResponse = await api.get(`/jobs/${id}/my-bid`);
+          setUserBid(userBidResponse.data);
+        } catch (err) {
+          // No bid found, which is fine
+          setUserBid(null);
+        }
+      }
     } catch (err) {
-      setError('Failed to fetch job details');
+      setError(err.response?.data?.message || 'Failed to fetch job details');
       console.error(err);
     } finally {
       setIsLoading(false);
     }
   };
-
-  const fetchUserBid = async () => {
-    if (!currentUser || !currentUser.roles.includes('freelancer')) return;
-    
-    try {
-      const response = await api.get(`/jobs/${id}/bids/my-bid`);
-      // Add the user's bid to the bids list
-      if (response.data) {
-        setBids(prevBids => {
-          // Filter out any existing bids from this user
-          const otherBids = prevBids.filter(bid => 
-            bid.freelancer._id !== currentUser._id
-          );
-          return [...otherBids, response.data];
-        });
-      }
-    } catch (err) {
-      console.error('Failed to fetch user bid:', err);
-    }
-  };
   
-  const handleBidFormChange = (e) => {
-    const { name, value } = e.target;
-    setBidForm(prev => ({
-      ...prev,
-      [name]: value
+  const handleBidSubmitted = (newBid) => {
+    setUserBid(newBid);
+    
+    // Update job to reflect new bid count
+    setJob(prevJob => ({
+      ...prevJob,
+      totalBids: (prevJob.totalBids || 0) + 1
     }));
-  };
-  
-  const handleBidSubmit = async (e) => {
-    e.preventDefault();
-    setIsBidding(true);
-    setBidError('');
-    setBidSuccess('');
-    
-    try {
-      const response = await api.post(`/jobs/${id}/bids`, {
-        amount: parseFloat(bidForm.amount),
-        deliveryTime: parseInt(bidForm.deliveryTime),
-        proposal: bidForm.proposal
-      });
-      
-      setBidSuccess('Your bid has been submitted successfully!');
-      setBidForm({
-        amount: '',
-        deliveryTime: '',
-        proposal: ''
-      });
-      
-      // Update job to reflect new bid
-      fetchJobDetails();
-    } catch (err) {
-      setBidError(err.response?.data?.message || 'Failed to submit bid');
-    } finally {
-      setIsBidding(false);
-    }
   };
   
   const handleAcceptBid = async (bidId) => {
     try {
       const response = await api.post(`/orders/from-bid/${bidId}`);
-      await api.put(`/jobs/${id}`, { isActive: false });
       navigate(`/orders/${response.data._id}`);
     } catch (err) {
-      setError('Failed to accept bid');
-      console.error(err);
+      setError(err.response?.data?.message || 'Failed to accept bid');
+    }
+  };
+  
+  const handleRejectBid = async (bidId) => {
+    try {
+      await api.patch(`/jobs/${id}/bids/${bidId}/reject`);
+      
+      // Update bids list
+      setBids(prevBids => 
+        prevBids.map(bid => 
+          bid._id === bidId ? { ...bid, status: 'rejected' } : bid
+        )
+      );
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to reject bid');
     }
   };
   
   if (isLoading) {
-    return <div className="text-center py-8">Loading job details...</div>;
+    return (
+      <div className="flex justify-center items-center py-12">
+        <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+        <p className="ml-2">Loading job details...</p>
+      </div>
+    );
   }
   
   if (error || !job) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-8 mt-16">
         <div className="bg-red-100 text-red-700 p-4 rounded mb-4">
           {error || 'Job not found'}
         </div>
@@ -134,18 +106,14 @@ const JobDetails = () => {
     );
   }
   
-  // Check if current user has already placed a bid
-  const userHasBid = currentUser && 
-    bids.some(bid => bid.freelancer._id === currentUser._id);
+  // Determine if current user has placed a bid
+  const hasPlacedBid = userBid !== null;
   
-  // Check if current user is the job owner
-  const isJobOwner = currentUser && job.client._id === currentUser._id;
-  
-  // Check if user is a freelancer
-  const isFreelancer = currentUser && currentUser.roles.includes('freelancer');
+  // Determine if current user is the job owner
+  const isJobOwner = currentUser && job.client._id === currentUser._id && activeRole === 'client';
   
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 mt-16">
       <Link to="/jobs" className="text-blue-500 hover:underline mb-4 inline-block">
         &larr; Back to Jobs
       </Link>
@@ -159,10 +127,43 @@ const JobDetails = () => {
                 <span className="mr-3">Posted by {job.client.username}</span>
                 <span>{new Date(job.createdAt).toLocaleDateString()}</span>
               </div>
+              
+              <div className="flex flex-wrap gap-2 mb-4">
+                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm">
+                  {job.category}
+                </span>
+                {job.subCategory && (
+                  <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm">
+                    {job.subCategory}
+                  </span>
+                )}
+                <span className={`px-3 py-1 rounded-full text-sm ${
+                  job.location.type === 'remote'
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-orange-100 text-orange-700'
+                }`}>
+                  {job.location.type === 'remote' ? 'Remote' : 'On-site'}
+                </span>
+                {job.location.type === 'onsite' && job.location.city && job.location.country && (
+                  <span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm">
+                    {job.location.city}, {job.location.country}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="text-right">
-              <div className="text-xl font-bold">${job.budget.min} - ${job.budget.max}</div>
+              <div className="text-xl font-bold text-blue-600">
+                BMS {job.budget.min} - BMS {job.budget.max}
+              </div>
               <div className="text-sm text-gray-500">Budget Range</div>
+              {job.deadline && (
+                <div className="mt-2 text-sm">
+                  <span className="text-gray-600">Deadline:</span> 
+                  <span className="font-semibold ml-1">
+                    {new Date(job.deadline).toLocaleDateString()}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
           
@@ -170,6 +171,23 @@ const JobDetails = () => {
             <h2 className="text-lg font-semibold mb-2">Job Description</h2>
             <p className="text-gray-700 whitespace-pre-line">{job.description}</p>
           </div>
+          
+          {job.attachments && job.attachments.length > 0 && (
+            <div className="mt-6">
+              <h2 className="text-lg font-semibold mb-2">Attachments</h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {job.attachments.map((attachment, index) => (
+                  <div key={index} className="border rounded overflow-hidden">
+                    <img
+                      src={`/src/assets/uploads/jobs/${attachment}`}
+                      alt={`Attachment ${index + 1}`}
+                      className="w-full h-32 object-cover"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           
           {job.skills && job.skills.length > 0 && (
             <div className="mt-6">
@@ -188,271 +206,95 @@ const JobDetails = () => {
           )}
           
           <div className="flex items-center justify-between mt-8 pt-6 border-t">
-            <div>
-              <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full">
-                {job.category}
-              </span>
-              {job.subCategory && (
-                <span className="ml-2 text-gray-500">
-                  / {job.subCategory}
-                </span>
-              )}
-            </div>
             <div className="text-gray-500">
-              {job.totalBids} bids so far
+              <span className="font-semibold">{job.totalBids || 0}</span> bids so far
             </div>
+            {!isJobOwner && activeRole === 'freelancer' && !job.selectedBid && (
+              <div>
+                <a href="#bid-section" className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
+                  Place Bid
+                </a>
+              </div>
+            )}
           </div>
-          
-          {/* Show edit button if the current user is the job owner */}
-          {isJobOwner && (
-            <div className="mt-4 flex justify-end">
-              <Link
-                to={`/jobs/${job._id}/edit`}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
-              >
-                Edit Job
-              </Link>
-              <button
-                onClick={async () => {
-                  try {
-                    // Set isActive to false to close the job
-                    await api.put(`/jobs/${job._id}`, { isActive: !job.isActive });
-                    // Refresh job data
-                    fetchJobDetails();
-                  } catch (err) {
-                    setError('Failed to update job status');
-                    console.error(err);
-                  }
-                }}
-                className={`px-4 py-2 rounded text-white ${
-                  job.isActive
-                    ? 'bg-red-500 hover:bg-red-600'
-                    : 'bg-green-500 hover:bg-green-600'
-                }`}
-              >
-                {job.isActive ? 'Close Job' : 'Reopen Job'}
-              </button>
-            </div>
-          )}
         </div>
       </div>
       
-      {/* CLIENT VIEW: Show bids if the current user is the job owner */}
-      {isJobOwner && (
+      {/* Bid section for freelancers */}
+      {activeRole === 'freelancer' && !isJobOwner && (
+        <div id="bid-section">
+          <BidForm 
+            job={job} 
+            onBidSubmitted={handleBidSubmitted} 
+            userHasBid={hasPlacedBid}
+          />
+        </div>
+      )}
+      
+      {/* Bids section for job owner */}
+      {isJobOwner && bids.length > 0 && (
         <div className="bg-white rounded-lg shadow overflow-hidden">
           <div className="p-6">
             <h2 className="text-xl font-bold mb-4">Submitted Bids</h2>
             
-            {bids.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-gray-100 text-left">
-                      <th className="px-4 py-2">Freelancer</th>
-                      <th className="px-4 py-2">Amount</th>
-                      <th className="px-4 py-2">Delivery</th>
-                      <th className="px-4 py-2">Date</th>
-                      <th className="px-4 py-2">Status</th>
-                      <th className="px-4 py-2">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bids.map(bid => (
-                      <tr key={bid._id} className="border-b">
-                        <td className="px-4 py-2">
-                          <div className="flex items-center">
-                            <div className="h-8 w-8 rounded-full bg-gray-300 mr-2 flex items-center justify-center text-white">
-                              {bid.freelancer.profileImage ? (
-                                <img 
-                                  src={bid.freelancer.profileImage} 
-                                  alt={bid.freelancer.username}
-                                  className="h-8 w-8 rounded-full"
-                                />
-                              ) : (
-                                bid.freelancer.username.charAt(0).toUpperCase()
-                              )}
-                            </div>
-                            <div>
-                              <div className="font-semibold">{bid.freelancer.username}</div>
-                              <div className="text-xs text-gray-500">
-                                Rating: {bid.freelancer.avgRating?.toFixed(1) || 'N/A'}
-                              </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-100 text-left">
+                    <th className="px-4 py-2">Freelancer</th>
+                    <th className="px-4 py-2">Amount</th>
+                    <th className="px-4 py-2">Delivery</th>
+                    <th className="px-4 py-2">Proposal</th>
+                    <th className="px-4 py-2">Date</th>
+                    <th className="px-4 py-2">Status</th>
+                    <th className="px-4 py-2">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bids.map(bid => (
+                    <tr key={bid._id} className="border-b hover:bg-gray-50">
+                      <td className="px-4 py-2">
+                        <div className="flex items-center">
+                          <div className="h-8 w-8 rounded-full bg-gray-300 mr-2 flex items-center justify-center text-white">
+                            {bid.freelancer.profileImage ? (
+                              <img 
+                                src={bid.freelancer.profileImage} 
+                                alt={bid.freelancer.username}
+                                className="h-8 w-8 rounded-full object-cover"
+                              />
+                            ) : (
+                              <span>
+                                {bid.freelancer.username.charAt(0).toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <div className="font-semibold">{bid.freelancer.username}</div>
+                            <div className="text-xs text-gray-500">
+                              Rating: {bid.freelancer.avgRating?.toFixed(1) || 'N/A'}
                             </div>
                           </div>
-                        </td>
-                        <td className="px-4 py-2 font-semibold">${bid.amount.toFixed(2)}</td>
-                        <td className="px-4 py-2">{bid.deliveryTime} days</td>
-                        <td className="px-4 py-2 text-sm text-gray-500">
-                          {new Date(bid.createdAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-2">
-                          <span className={`px-2 py-1 rounded-full text-xs ${
-                            bid.status === 'accepted' 
-                              ? 'bg-green-100 text-green-800' 
-                              : bid.status === 'rejected' 
-                              ? 'bg-red-100 text-red-800' 
-                              : 'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {bid.status.charAt(0).toUpperCase() + bid.status.slice(1)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2">
-                          {bid.status === 'pending' && (
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={() => handleAcceptBid(bid._id)}
-                                className="bg-green-500 hover:bg-green-600 text-white text-xs px-3 py-1 rounded"
-                              >
-                                Accept
-                              </button>
-                              <button
-                                onClick={async () => {
-                                  try {
-                                    await api.patch(`/jobs/${id}/bids/${bid._id}/reject`);
-                                    fetchJobDetails(); // Refresh bids
-                                  } catch (err) {
-                                    console.error('Failed to reject bid:', err);
-                                  }
-                                }}
-                                className="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-1 rounded"
-                              >
-                                Reject
-                              </button>
-                            </div>
-                          )}
-                          
-                          {/* View freelancer profile button */}
-                          <Link
-                            to={`/users/${bid.freelancer._id}`}
-                            className="text-blue-500 hover:underline text-xs ml-2"
-                          >
-                            View Profile
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="bg-yellow-50 border border-yellow-200 p-4 rounded">
-                <p className="text-yellow-800">
-                  No bids have been submitted for this job yet. Check back later!
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-      
-      {/* FREELANCER VIEW: Bid section for freelancers who are not the job owner */}
-      {isFreelancer && !isJobOwner && (
-        <div className="bg-white rounded-lg shadow overflow-hidden mb-8">
-          <div className="p-6">
-            <h2 className="text-xl font-bold mb-4">Place Your Bid</h2>
-            
-            {userHasBid ? (
-              <div className="bg-yellow-100 text-yellow-700 p-4 rounded">
-                You have already placed a bid on this job.
-              </div>
-            ) : bidSuccess ? (
-              <div className="bg-green-100 text-green-700 p-4 rounded mb-4">
-                {bidSuccess}
-              </div>
-            ) : (
-              <>
-                {bidError && (
-                  <div className="bg-red-100 text-red-700 p-4 rounded mb-4">
-                    {bidError}
-                  </div>
-                )}
-                
-                <form onSubmit={handleBidSubmit}>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="amount">
-                        Bid Amount (USD)
-                      </label>
-                      <div className="relative">
-                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">$</span>
-                        <input
-                          className="w-full pl-8 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-                          type="number"
-                          id="amount"
-                          name="amount"
-                          value={bidForm.amount}
-                          onChange={handleBidFormChange}
-                          placeholder="0.00"
-                          min={job.budget.min}
-                          max={job.budget.max}
-                          step="0.01"
-                          required
-                        />
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="deliveryTime">
-                        Delivery Time (days)
-                      </label>
-                      <input
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-                        type="number"
-                        id="deliveryTime"
-                        name="deliveryTime"
-                        value={bidForm.deliveryTime}
-                        onChange={handleBidFormChange}
-                        placeholder="1"
-                        min="1"
-                        max="30"
-                        required
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="mb-4">
-                    <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="proposal">
-                      Cover Letter / Proposal
-                    </label>
-                    <textarea
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-                      id="proposal"
-                      name="proposal"
-                      rows="5"
-                      value={bidForm.proposal}
-                      onChange={handleBidFormChange}
-                      placeholder="Explain why you're the best fit for this job..."
-                      required
-                    ></textarea>
-                  </div>
-                  
-                  <button
-                    type="submit"
-                    className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline"
-                    disabled={isBidding}
-                  >
-                    {isBidding ? 'Submitting...' : 'Submit Bid'}
-                  </button>
-                </form>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-        {isFreelancer && !isJobOwner && userHasBid && (
-          <div className="bg-white rounded-lg shadow overflow-hidden mb-8">
-            <div className="p-6">
-              <h2 className="text-xl font-bold mb-4">Your Bid</h2>
-              
-              {bids.filter(bid => bid.freelancer._id === currentUser._id).map(bid => (
-                <div key={bid._id} className="border rounded-lg p-4">
-                  <div className="flex justify-between">
-                    <div>
-                      <p className="font-semibold text-lg">${bid.amount.toFixed(2)}</p>
-                      <p className="text-gray-600">Delivery: {bid.deliveryTime} days</p>
-                      <p className="text-gray-600">Status: 
-                        <span className={`ml-2 px-2 py-1 rounded-full text-xs ${
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 font-semibold">
+                        BMS {bid.amount.toFixed(2)}
+                      </td>
+                      <td className="px-4 py-2">
+                        {bid.deliveryTime} days
+                      </td>
+                      <td className="px-4 py-2 max-w-xs truncate">
+                        <button
+                          onClick={() => alert(bid.proposal)}
+                          className="text-blue-500 underline hover:text-blue-700"
+                        >
+                          View Proposal
+                        </button>
+                      </td>
+                      <td className="px-4 py-2 text-sm text-gray-500">
+                        {new Date(bid.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className={`px-2 py-1 rounded-full text-xs ${
                           bid.status === 'accepted' 
                             ? 'bg-green-100 text-green-800' 
                             : bid.status === 'rejected' 
@@ -461,54 +303,102 @@ const JobDetails = () => {
                         }`}>
                           {bid.status.charAt(0).toUpperCase() + bid.status.slice(1)}
                         </span>
-                      </p>
-                    </div>
-                    
-                    {bid.status === 'pending' && (
-                      <button
-                        onClick={async () => {
-                          try {
-                            // Call API to delete the bid
-                            await api.delete(`/jobs/${id}/bids/${bid._id}`);
-                            // Update the UI
-                            setBids(bids.filter(b => b._id !== bid._id));
-                            // Reset user has bid state
-                            fetchJobDetails();
-                          } catch (err) {
-                            console.error('Failed to retrieve bid:', err);
-                            alert('Failed to retrieve bid. Please try again.');
-                          }
-                        }}
-                        className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 h-10 rounded"
-                      >
-                        Withdraw Bid
-                      </button>
-                    )}
-                  </div>
-                  
-                  <div className="mt-4">
-                    <h3 className="font-semibold">Your Proposal:</h3>
-                    <p className="mt-2 text-gray-700 whitespace-pre-line">{bid.proposal}</p>
-                  </div>
-                </div>
-              ))}
+                      </td>
+                      <td className="px-4 py-2 whitespace-nowrap">
+                        {bid.status === 'pending' && !job.selectedBid && (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleAcceptBid(bid._id)}
+                              className="bg-green-500 hover:bg-green-600 text-white text-xs px-3 py-1 rounded"
+                            >
+                              Accept
+                            </button>
+                            <button
+                              onClick={() => handleRejectBid(bid._id)}
+                              className="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-1 rounded"
+                            >
+                              Reject
+                            </button>
+                            <button
+                              onClick={() => window.location = `mailto:${bid.freelancer.email}`}
+                              className="bg-blue-500 hover:bg-blue-600 text-white text-xs px-3 py-1 rounded"
+                            >
+                              Contact
+                            </button>
+                          </div>
+                        )}
+                        {bid.status === 'accepted' && (
+                          <span className="text-green-600 font-medium">Accepted</span>
+                        )}
+                        {bid.status === 'rejected' && (
+                          <span className="text-red-600 font-medium">Rejected</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
-        )}
+        </div>
+      )}
       
-      {/* If user is not logged in, show login prompt */}
-      {!currentUser && (
-        <div className="bg-white rounded-lg shadow overflow-hidden mb-8">
-          <div className="p-6 text-center">
-            <p className="mb-4">You need to be logged in to place a bid on this job.</p>
-            <div className="flex justify-center space-x-4">
-              <Link to="/login" className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
-                Login
-              </Link>
-              <Link to="/register" className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
-                Register
-              </Link>
+      {/* User's bid details (if they've placed a bid) */}
+      {activeRole === 'freelancer' && userBid && (
+        <div className="bg-white rounded-lg shadow overflow-hidden mt-8">
+          <div className="bg-blue-500 text-white px-6 py-4">
+            <h3 className="text-lg font-bold">Your Bid</h3>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <h4 className="text-sm font-semibold text-gray-500 mb-1">Amount</h4>
+                <p className="text-xl font-bold">BMS {userBid.amount.toFixed(2)}</p>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-gray-500 mb-1">Delivery Time</h4>
+                <p className="text-xl font-bold">{userBid.deliveryTime} days</p>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-gray-500 mb-1">Status</h4>
+                <span className={`px-3 py-1 rounded-full text-sm ${
+                  userBid.status === 'accepted' 
+                    ? 'bg-green-100 text-green-800' 
+                    : userBid.status === 'rejected' 
+                    ? 'bg-red-100 text-red-800' 
+                    : 'bg-yellow-100 text-yellow-800'
+                }`}>
+                  {userBid.status.charAt(0).toUpperCase() + userBid.status.slice(1)}
+                </span>
+              </div>
             </div>
+            
+            <div className="mt-4">
+              <h4 className="text-sm font-semibold text-gray-500 mb-1">Your Proposal</h4>
+              <p className="text-gray-700 whitespace-pre-line border p-4 rounded bg-gray-50">
+                {userBid.proposal}
+              </p>
+            </div>
+            
+            <div className="mt-6 text-sm text-gray-500">
+              Bid submitted on {new Date(userBid.createdAt).toLocaleString()}
+            </div>
+            
+            {userBid.status === 'accepted' && (
+              <div className="mt-4 bg-green-50 border border-green-200 p-4 rounded">
+                <p className="text-green-800">
+                  Congratulations! Your bid has been accepted. The client will create an order to start the project.
+                </p>
+              </div>
+            )}
+            
+            {userBid.status === 'rejected' && (
+              <div className="mt-4 bg-red-50 border border-red-200 p-4 rounded">
+                <p className="text-red-800">
+                  Your bid was not selected for this project. Keep trying with other jobs!
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}

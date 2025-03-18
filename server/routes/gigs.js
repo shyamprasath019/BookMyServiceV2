@@ -1,10 +1,10 @@
 // File: routes/gigs.js
 const router = require('express').Router();
 const Gig = require('../models/Gig');
-const { verifyToken, isFreelancer } = require('../middleware/auth');
+const { verifyToken, isActiveFreelancer, hasFreelancerRole } = require('../middleware/auth');
 
 // Create a new gig (freelancers only)
-router.post('/', verifyToken, isFreelancer, async (req, res, next) => {
+router.post('/', verifyToken, isActiveFreelancer, async (req, res, next) => {
   try {
     const newGig = new Gig({
       ...req.body,
@@ -19,7 +19,7 @@ router.post('/', verifyToken, isFreelancer, async (req, res, next) => {
 });
 
 // Get gigs created by the current freelancer
-router.get('/my-gigs', verifyToken, isFreelancer, async (req, res, next) => {
+router.get('/my-gigs', verifyToken, hasFreelancerRole, async (req, res, next) => {
   try {
     const gigs = await Gig.find({ owner: req.user.id })
       .sort({ createdAt: -1 })

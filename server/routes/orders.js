@@ -4,10 +4,10 @@ const Order = require('../models/Order');
 const Gig = require('../models/Gig');
 const Job = require('../models/Job');
 const Bid = require('../models/Bid');
-const { verifyToken, isClient } = require('../middleware/auth');
+const { verifyToken, isActiveClient } = require('../middleware/auth');
 
 // Create order from gig (client only)
-router.post('/from-gig/:gigId', verifyToken, isClient, async (req, res, next) => {
+router.post('/from-gig/:gigId', verifyToken, isActiveClient , async (req, res, next) => {
   try {
     const gig = await Gig.findById(req.params.gigId).populate('owner');
     
@@ -41,7 +41,7 @@ router.post('/from-gig/:gigId', verifyToken, isClient, async (req, res, next) =>
 });
 
 // Create order from bid (client only)
-router.post('/from-bid/:bidId', verifyToken, isClient, async (req, res, next) => {
+router.post('/from-bid/:bidId', verifyToken, isActiveClient , async (req, res, next) => {
   try {
     const bid = await Bid.findById(req.params.bidId)
       .populate('job')
