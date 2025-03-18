@@ -11,6 +11,7 @@ const jobRoutes = require('./routes/jobs');
 const orderRoutes = require('./routes/orders');
 const paymentRoutes = require('./routes/payments');
 const messageRoutes = require('./routes/messages');
+const walletRoutes = require('./routes/wallet')
 
 // Load environment variables
 dotenv.config();
@@ -34,6 +35,7 @@ app.use('/api/jobs', jobRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/wallet', walletRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
