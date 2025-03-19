@@ -114,9 +114,9 @@ const JobDetails = () => {
   
   return (
     <div className="container mx-auto px-4 py-8 mt-16">
-      <Link to="/jobs" className="text-blue-500 hover:underline mb-4 inline-block">
+      {/* <Link to="/jobs" className="text-blue-500 hover:underline mb-4 inline-block">
         &larr; Back to Jobs
-      </Link>
+      </Link> */}
       
       <div className="bg-white rounded-lg shadow overflow-hidden mb-8">
         <div className="p-6">

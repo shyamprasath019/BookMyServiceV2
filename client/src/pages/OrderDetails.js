@@ -117,6 +117,24 @@ const OrderDetails = () => {
       setIsSubmittingReview(false);
     }
   };
+
+  const handleCancelOrder = async () => {
+    try {
+      // First update the order status to cancelled
+      await api.patch(`/orders/${id}/status`, { status: 'cancelled' });
+      
+      // Then process the refund from escrow back to client
+      await api.post(`/wallet/refund/${id}`);
+      
+      // Refresh order data
+      fetchOrderDetails();
+      
+      // Show success message
+      alert('Order has been cancelled and payment refunded.');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to cancel order');
+    }
+  };
   
   const handleStatusChange = async (status) => {
     try {
@@ -177,6 +195,12 @@ const OrderDetails = () => {
     ? order.reviewByFreelancer 
     : false;
   
+  // Safe getter for username and profile image
+  const getUsername = (user) => user?.username || 'User';
+  const getInitial = (user) => {
+    return user?.username ? user.username.charAt(0).toUpperCase() : 'U';
+  };
+  
   return (
     <div className="container mx-auto px-4 py-8">
       <Link to="/dashboard" className="text-blue-500 hover:underline mb-4 inline-block">
@@ -218,44 +242,48 @@ const OrderDetails = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <div>
               <h3 className="text-lg font-semibold mb-2">Client</h3>
-              <div className="flex items-center">
-                <div className="h-10 w-10 rounded-full bg-gray-300 mr-3 flex items-center justify-center text-white">
-                  {order.client.profileImage ? (
-                    <img 
-                      src={order.client.profileImage} 
-                      alt={order.client.username}
-                      className="h-10 w-10 rounded-full"
-                    />
-                  ) : (
-                    order.client.username.charAt(0).toUpperCase()
-                  )}
+              {order.client && (
+                <div className="flex items-center">
+                  <div className="h-10 w-10 rounded-full bg-gray-300 mr-3 flex items-center justify-center text-white">
+                    {order.client.profileImage ? (
+                      <img 
+                        src={order.client.profileImage} 
+                        alt={getUsername(order.client)}
+                        className="h-10 w-10 rounded-full"
+                      />
+                    ) : (
+                      getInitial(order.client)
+                    )}
+                  </div>
+                  <div>
+                    <div className="font-semibold">{getUsername(order.client)}</div>
+                    <div className="text-sm text-gray-500">{order.client.email || 'No email available'}</div>
+                  </div>
                 </div>
-                <div>
-                  <div className="font-semibold">{order.client.username}</div>
-                  <div className="text-sm text-gray-500">{order.client.email}</div>
-                </div>
-              </div>
+              )}
             </div>
             
             <div>
               <h3 className="text-lg font-semibold mb-2">Freelancer</h3>
-              <div className="flex items-center">
-                <div className="h-10 w-10 rounded-full bg-gray-300 mr-3 flex items-center justify-center text-white">
-                  {order.freelancer.profileImage ? (
-                    <img 
-                      src={order.freelancer.profileImage} 
-                      alt={order.freelancer.username}
-                      className="h-10 w-10 rounded-full"
-                    />
-                  ) : (
-                    order.freelancer.username.charAt(0).toUpperCase()
-                  )}
+              {order.freelancer && (
+                <div className="flex items-center">
+                  <div className="h-10 w-10 rounded-full bg-gray-300 mr-3 flex items-center justify-center text-white">
+                    {order.freelancer.profileImage ? (
+                      <img 
+                        src={order.freelancer.profileImage} 
+                        alt={getUsername(order.freelancer)}
+                        className="h-10 w-10 rounded-full"
+                      />
+                    ) : (
+                      getInitial(order.freelancer)
+                    )}
+                  </div>
+                  <div>
+                    <div className="font-semibold">{getUsername(order.freelancer)}</div>
+                    <div className="text-sm text-gray-500">{order.freelancer.email || 'No email available'}</div>
+                  </div>
                 </div>
-                <div>
-                  <div className="font-semibold">{order.freelancer.username}</div>
-                  <div className="text-sm text-gray-500">{order.freelancer.email}</div>
-                </div>
-              </div>
+              )}
             </div>
           </div>
           
@@ -356,14 +384,15 @@ const OrderDetails = () => {
               
               {/* Cancel Order */}
               {['pending', 'in_progress'].includes(order.status) && (
-                <div className="mt-6">
-                  <button
-                    onClick={() => handleStatusChange('cancelled')}
-                    className="text-red-600 hover:text-red-800 font-medium"
-                  >
-                    Cancel Order
-                  </button>
-                </div>
+<div className="mt-6">
+  <button
+    onClick={handleCancelOrder}
+    className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded"
+  >
+    Cancel Order & Request Refund
+  </button>
+</div>
+
               )}
             </div>
           )}
@@ -498,7 +527,7 @@ const OrderDetails = () => {
                 <div className="bg-gray-50 p-4 rounded">
                   <div className="flex items-center mb-2">
                     <div className="flex mr-2">
-                      {[1, 2, 3, 4, 5].map(star => (
+                      {[1, 2, 3, 4, 5].map((star) => (
                         <svg 
                           key={star} 
                           className={`h-5 w-5 ${
@@ -536,7 +565,7 @@ const OrderDetails = () => {
                         Rating
                       </label>
                       <div className="flex">
-                        {[1, 2, 3, 4, 5].map(star => (
+                        {[1, 2, 3, 4, 5].map((star) => (
                           <button
                             key={star}
                             type="button"
@@ -594,7 +623,7 @@ const OrderDetails = () => {
                 <div className="bg-gray-50 p-4 rounded">
                   <div className="flex items-center mb-2">
                     <div className="flex mr-2">
-                      {[1, 2, 3, 4, 5].map(star => (
+                      {[1, 2, 3, 4, 5].map((star) => (
                         <svg 
                           key={star} 
                           className={`h-5 w-5 ${
@@ -632,7 +661,7 @@ const OrderDetails = () => {
                         Rating
                       </label>
                       <div className="flex">
-                        {[1, 2, 3, 4, 5].map(star => (
+                        {[1, 2, 3, 4, 5].map((star) => (
                           <button
                             key={star}
                             type="button"
@@ -646,7 +675,7 @@ const OrderDetails = () => {
                               fill="currentColor" 
                               viewBox="0 0 20 20"
                             >
-                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                             </svg>
                           </button>
                         ))}

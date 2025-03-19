@@ -17,8 +17,8 @@ import GigsList from './pages/GigsList';
 import GigDetails from './pages/GigDetails';
 import JobsList from './pages/JobsList';
 import JobDetails from './pages/JobDetails';
-import FindFreelancers from './pages/FindFreelancers';
-import FreelancerProfile from './pages/FreelancerProfile';
+//import FindFreelancers from './pages/FindFreelancers';
+//import FreelancerProfile from './pages/FreelancerProfile';
 
 // Private Pages
 import Dashboard from './pages/Dashboard';
@@ -31,7 +31,7 @@ import Profile from './pages/Profile';
 import Messages from './pages/Messages';
 import Conversation from './pages/Conversation';
 import Wallet from './components/Wallet';
-import Portfolio from './pages/Portfolio';
+//import Portfolio from './pages/Portfolio';
 import NotFound from './pages/NotFound';
 
 // Role-based Route Guards
@@ -130,8 +130,8 @@ function App() {
               <Route path="/jobs/:id" element={<JobDetails />} />
               
               {/* Freelancer Routes */}
-              <Route path="/find-freelancers" element={<FindFreelancers />} />
-              <Route path="/freelancers/:id" element={<FreelancerProfile />} />
+              {/* <Route path="/find-freelancers" element={<FindFreelancers />} />
+              <Route path="/freelancers/:id" element={<FreelancerProfile />} /> */}
               
               {/* Private Routes (require login) */}
               <Route path="/dashboard" element={
@@ -208,11 +208,11 @@ function App() {
                 </FreelancerRoute>
               } />
               
-              <Route path="/portfolio" element={
+              {/* <Route path="/portfolio" element={
                 <FreelancerRoute>
                   <Portfolio />
                 </FreelancerRoute>
-              } />
+              } /> */}
               
               {/* 404 and Redirects */}
               <Route path="/404" element={<NotFound />} />

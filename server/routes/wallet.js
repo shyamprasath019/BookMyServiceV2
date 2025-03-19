@@ -295,4 +295,88 @@ router.post('/release/:orderId', verifyToken, async (req, res, next) => {
   }
 });
 
+// NEW ROUTE: Refund payment from escrow when order is cancelled
+router.post('/refund/:orderId', verifyToken, async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    
+    const order = await Order.findById(orderId);
+    
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+    
+    // Check if user is authorized (client or freelancer can initiate cancellation)
+    const isClient = order.client.toString() === req.user.id;
+    const isFreelancer = order.freelancer.toString() === req.user.id;
+    
+    if (!isClient && !isFreelancer) {
+      return res.status(403).json({ message: 'You are not authorized to refund this order' });
+    }
+    
+    // Check if order is in escrow
+    if (order.paymentStatus !== 'in_escrow') {
+      return res.status(400).json({ message: 'Order payment is not in escrow' });
+    }
+    
+    // Check if order is cancelled
+    if (order.status !== 'cancelled') {
+      return res.status(400).json({ message: 'Only cancelled orders can be refunded' });
+    }
+    
+    // Find client and freelancer
+    const client = await User.findById(order.client);
+    const freelancer = await User.findById(order.freelancer);
+    
+    if (!client) {
+      return res.status(404).json({ message: 'Client not found' });
+    }
+    
+    if (!freelancer) {
+      return res.status(404).json({ message: 'Freelancer not found' });
+    }
+    
+    // Create refund transaction for client
+    const clientTransaction = {
+      type: 'refund',
+      amount: order.price,
+      description: `Refund for cancelled order #${order._id.toString().substring(0, 8)}`,
+      relatedOrder: order._id,
+      createdAt: new Date()
+    };
+    
+    // Create refund transaction for freelancer (to update escrow records)
+    const freelancerTransaction = {
+      type: 'refund',
+      amount: order.price,
+      description: `Escrow refunded for cancelled order #${order._id.toString().substring(0, 8)}`,
+      relatedOrder: order._id,
+      createdAt: new Date()
+    };
+    
+    // Update client wallet (add refund)
+    client.clientWallet.balance += order.price;
+    client.clientWallet.transactions.push(clientTransaction);
+    
+    // Update freelancer wallet (remove pending amount)
+    freelancer.freelancerWallet.pendingBalance -= order.price;
+    freelancer.freelancerWallet.transactions.push(freelancerTransaction);
+    
+    // Update order
+    order.paymentStatus = 'refunded';
+    
+    // Save changes
+    await client.save();
+    await freelancer.save();
+    await order.save();
+    
+    res.status(200).json({ 
+      message: 'Payment refunded successfully.',
+      order
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

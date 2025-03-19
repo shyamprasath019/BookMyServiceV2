@@ -95,7 +95,7 @@ const UserSchema = new mongoose.Schema({
     transactions: [{
       type: {
         type: String,
-        enum: ['deposit', 'withdrawal', 'payment', 'release']
+        enum: ['deposit', 'withdrawal', 'payment', 'refund', 'release', 'escrow']
       },
       amount: Number,
       description: String,

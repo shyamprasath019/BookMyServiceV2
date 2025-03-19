@@ -230,10 +230,10 @@ const CreateGig = () => {
           
           <div>
             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="price">
-              Price (USD)
+              Price (BMS)
             </label>
             <div className="relative">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">$</span>
+              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">BMS</span>
               <input
                 className="w-full pl-8 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
                 type="number"

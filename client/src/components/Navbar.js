@@ -34,16 +34,18 @@ const Navbar = () => {
     if (activeRole === 'client') {
       return [
         { to: '/gigs', label: 'Find Services' },
-        { to: '/find-freelancers', label: 'Find Freelancers' },
-        { to: '/jobs/my-jobs', label: 'My Jobs' }
+        { to : '/create-job', label: 'Post a Job'}
+        // { to: '/find-freelancers', label: 'Find Freelancers' },
+        // { to: '/jobs/my-jobs', label: 'My Jobs' }
       ];
     }
     
     if (activeRole === 'freelancer') {
       return [
         { to: '/jobs', label: 'Find Jobs' },
-        { to: '/gigs/my-gigs', label: 'My Gigs' },
-        { to: '/portfolio', label: 'My Portfolio' }
+        { to: '/create-gig', label: 'Post a Gig'}
+        // { to: '/gigs/my-gigs', label: 'My Gigs' },
+        // { to: '/portfolio', label: 'My Portfolio' }
       ];
     }
     
