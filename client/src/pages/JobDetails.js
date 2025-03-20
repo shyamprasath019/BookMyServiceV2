@@ -320,7 +320,7 @@ const JobDetails = () => {
                               Reject
                             </button>
                             <button
-                              onClick={() => window.location = `mailto:${bid.freelancer.email}`}
+                              onClick={() => navigate(`/messages/${conversationId}`)}
                               className="bg-blue-500 hover:bg-blue-600 text-white text-xs px-3 py-1 rounded"
                             >
                               Contact

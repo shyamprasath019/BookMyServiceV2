@@ -300,6 +300,7 @@ router.post('/refund/:orderId', verifyToken, async (req, res, next) => {
   try {
     const { orderId } = req.params;
     
+    // Find the order
     const order = await Order.findById(orderId);
     
     if (!order) {
@@ -314,14 +315,16 @@ router.post('/refund/:orderId', verifyToken, async (req, res, next) => {
       return res.status(403).json({ message: 'You are not authorized to refund this order' });
     }
     
-    // Check if order is in escrow
-    if (order.paymentStatus !== 'in_escrow') {
-      return res.status(400).json({ message: 'Order payment is not in escrow' });
-    }
-    
-    // Check if order is cancelled
+    // Check if order status is cancelled
     if (order.status !== 'cancelled') {
       return res.status(400).json({ message: 'Only cancelled orders can be refunded' });
+    }
+    
+    // Check if payment is in escrow
+    if (order.paymentStatus !== 'in_escrow') {
+      return res.status(400).json({ 
+        message: 'Order payment is not in escrow or has already been refunded' 
+      });
     }
     
     // Find client and freelancer
@@ -362,19 +365,27 @@ router.post('/refund/:orderId', verifyToken, async (req, res, next) => {
     freelancer.freelancerWallet.pendingBalance -= order.price;
     freelancer.freelancerWallet.transactions.push(freelancerTransaction);
     
-    // Update order
+    // Update order payment status
     order.paymentStatus = 'refunded';
     
-    // Save changes
-    await client.save();
-    await freelancer.save();
-    await order.save();
+    // Save all changes
+    await Promise.all([
+      client.save(),
+      freelancer.save(),
+      order.save()
+    ]);
+    
+    console.log(`Refund processed - Order: ${order._id}, Amount: ${order.price}, Client: ${client._id}, Freelancer: ${freelancer._id}`);
     
     res.status(200).json({ 
       message: 'Payment refunded successfully.',
       order
     });
   } catch (err) {
+    console.error('Wallet refund error:', err);
+    if (!res.headersSent) {
+      return res.status(500).json({ message: 'An error occurred processing the refund', error: err.message });
+    }
     next(err);
   }
 });

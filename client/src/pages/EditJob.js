@@ -20,7 +20,7 @@ const EditJob = () => {
     },
     deadline: '',
     skills: [],
-    attachments: job.attachments || []
+    attachments: []
   });
   
   const [error, setError] = useState('');

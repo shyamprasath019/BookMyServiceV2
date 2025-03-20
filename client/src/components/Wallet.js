@@ -34,6 +34,35 @@ const Wallet = () => {
       setLoading(false);
     }
   };
+
+  const getTransactionSign = (transactionType, userRole) => {
+    // Transaction types that increase balance (positive) for both roles
+    if (transactionType === 'deposit') {
+      return '+';
+    }
+    
+    // Transaction types that decrease balance (negative) for both roles
+    if (transactionType === 'withdrawal') {
+      return '-';
+    }
+    
+    // Role-specific transaction types
+    if (userRole === 'client') {
+      // Client transactions
+      if (transactionType === 'payment') return '-'; // Client pays
+      if (transactionType === 'refund') return '+';  // Client gets refund
+      if (transactionType === 'escrow') return '(-)';  // Money goes to escrow
+    } else if (userRole === 'freelancer') {
+      // Freelancer transactions
+      if (transactionType === 'release') return '+';  // Money released to freelancer
+      if (transactionType === 'escrow') return '(+)';   // Money held in escrow (pending)
+      if (transactionType === 'refund') return '-';   // Escrow money returned to client
+    }
+    
+    // Default to negative for unknown transaction types
+    return '-';
+  };
+
   
   const handleDeposit = async (e) => {
     e.preventDefault();
@@ -217,13 +246,12 @@ const Wallet = () => {
                       </td>
                       <td className="py-2 px-4">{transaction.description}</td>
                       <td className="py-2 px-4 text-right font-semibold">
-                        <span className={transaction.type === 'deposit' || transaction.type === 'release' 
-                          ? 'text-green-600' 
-                          : 'text-red-600'}>
-                          {(transaction.type === 'deposit' || transaction.type === 'release') ? '+' : '-'} 
-                          BMS {transaction.amount.toFixed(2)}
-                        </span>
-                      </td>
+  <span className={getTransactionSign(transaction.type, activeRole) === '+' 
+    ? 'text-green-600' 
+    : 'text-red-600'}>
+    {getTransactionSign(transaction.type, activeRole)} BMS {transaction.amount.toFixed(2)}
+  </span>
+</td>
                     </tr>
                   ))}
                 </tbody>

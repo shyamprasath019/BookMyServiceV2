@@ -149,53 +149,72 @@ router.post('/from-bid/:bidId', verifyToken, isActiveClient , async (req, res, n
     }
   });
   
-  // Update order status (based on role)
-  router.patch('/:id/status', verifyToken, async (req, res, next) => {
-    try {
-      const { status } = req.body;
-      const order = await Order.findById(req.params.id);
-      
-      if (!order) {
-        return res.status(404).json({ message: 'Order not found' });
-      }
-      
-      // Check if user is part of the order
-      if (order.client.toString() !== req.user.id && order.freelancer.toString() !== req.user.id) {
-        return res.status(403).json({ message: 'Access denied: You are not part of this order' });
-      }
-      
-      // Apply status change based on role and current status
-      if (req.user.id === order.freelancer.toString()) {
-        // Freelancer actions
-        if (status === 'in_progress' && order.status === 'pending') {
-          order.status = 'in_progress';
-        } else if (status === 'completed' && order.status === 'in_progress') {
-          order.status = 'under_review';
-          order.completedAt = new Date();
-        } else {
-          return res.status(400).json({ message: 'Invalid status change for freelancer' });
-        }
-      } else if (req.user.id === order.client.toString()) {
-        // Client actions
-        if (status === 'cancelled' && ['pending', 'in_progress'].includes(order.status)) {
-          order.status = 'cancelled';
-        } else if (status === 'completed' && order.status === 'under_review') {
-          order.status = 'completed';
-          
-          // Update payment status to released
-          order.paymentStatus = 'released';
-        } else {
-          return res.status(400).json({ message: 'Invalid status change for client' });
-        }
-      }
-      
-      const updatedOrder = await order.save();
-      
-      res.status(200).json(updatedOrder);
-    } catch (err) {
-      next(err);
+ // Update order status (based on role)
+router.patch('/:id/status', verifyToken, async (req, res, next) => {
+  try {
+    const { status } = req.body;
+    const order = await Order.findById(req.params.id);
+    
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
     }
-  });
+    
+    // Check if user is part of the order
+    if (order.client.toString() !== req.user.id && order.freelancer.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Access denied: You are not part of this order' });
+    }
+    
+    // Apply status change based on role and current status
+    if (req.user.id === order.freelancer.toString()) {
+      // Freelancer actions
+      if (status === 'in_progress' && order.status === 'pending') {
+        order.status = 'in_progress';
+      } else if (status === 'completed' && order.status === 'in_progress') {
+        order.status = 'under_review';
+        order.completedAt = new Date();
+      } else {
+        return res.status(400).json({ message: 'Invalid status change for freelancer' });
+      }
+    } else if (req.user.id === order.client.toString()) {
+      // Client actions
+      if (status === 'cancelled' && ['pending', 'in_progress'].includes(order.status)) {
+        // Check if payment is in escrow before allowing cancellation
+        if (order.paymentStatus !== 'in_escrow') {
+          // If there's no payment yet, just allow cancellation
+          if (order.paymentStatus === 'pending') {
+            order.status = 'cancelled';
+          } else {
+            return res.status(400).json({ 
+              message: 'Order cannot be cancelled at this stage of payment process'
+            });
+          }
+        } else {
+          order.status = 'cancelled';
+          // Note: Refund will be handled by separate endpoint
+        }
+      } else if (status === 'completed' && order.status === 'under_review') {
+        order.status = 'completed';
+        
+        // Update payment status to released if needed
+        if (order.paymentStatus === 'in_escrow') {
+          order.paymentStatus = 'released';
+        }
+      } else {
+        return res.status(400).json({ message: 'Invalid status change for client' });
+      }
+    }
+    
+    const updatedOrder = await order.save();
+    
+    // Log the status change
+    console.log(`Order ${updatedOrder._id} status changed to ${updatedOrder.status} by ${req.user.id}`);
+    
+    res.status(200).json(updatedOrder);
+  } catch (err) {
+    console.error('Error updating order status:', err);
+    next(err);
+  }
+});
   
   // Submit deliverable (freelancer only)
   router.post('/:id/deliver', verifyToken, async (req, res, next) => {

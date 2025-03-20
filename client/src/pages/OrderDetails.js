@@ -119,20 +119,26 @@ const OrderDetails = () => {
   };
 
   const handleCancelOrder = async () => {
+    if (!window.confirm('Are you sure you want to cancel this order? This action cannot be undone.')) {
+      return;
+    }
+    
     try {
+      setError('');
       // First update the order status to cancelled
       await api.patch(`/orders/${id}/status`, { status: 'cancelled' });
       
       // Then process the refund from escrow back to client
-      await api.post(`/wallet/refund/${id}`);
+      const refundResponse = await api.post(`/wallet/refund/${id}`);
       
       // Refresh order data
-      fetchOrderDetails();
+      await fetchOrderDetails();
       
       // Show success message
-      alert('Order has been cancelled and payment refunded.');
+      alert('Order has been cancelled and payment refunded successfully.');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to cancel order');
+      console.error('Error cancelling order:', err);
+      setError(err.response?.data?.message || 'Failed to cancel order and process refund. Please try again.');
     }
   };
   
@@ -328,157 +334,156 @@ const OrderDetails = () => {
       
       {/* Order Actions */}
       <div className="bg-white rounded-lg shadow overflow-hidden mb-8">
-        <div className="p-6">
-          <h2 className="text-xl font-bold mb-4">Order Actions</h2>
-          
-          {/* Client Actions */}
-          {isClient && (
-            <div className="space-y-4">
-              {/* Payment Section */}
-              {order.paymentStatus === 'pending' && (
-                <div>
-                  {showPaymentForm ? (
-                    <PaymentForm order={order} onPaymentComplete={handlePaymentComplete} />
-                  ) : (
-                    <div>
-                      <div className="bg-yellow-50 border border-yellow-200 p-4 rounded mb-4">
-                        <p className="text-yellow-800">
-                          Payment is required to start this order. Your payment will be held in escrow until the order is completed.
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => setShowPaymentForm(true)}
-                        className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"
-                      >
-                        Pay Now (BMS {order.price.toFixed(2)})
-                      </button>
-                    </div>
-                  )}
+  <div className="p-6">
+    <h2 className="text-xl font-bold mb-4">Order Actions</h2>
+    
+    {/* Client Actions */}
+    {isClient && (
+      <div className="space-y-4">
+        {/* Payment Section - Only show when payment is pending */}
+        {order.paymentStatus === 'pending' && (
+          <div>
+            {showPaymentForm ? (
+              <PaymentForm order={order} onPaymentComplete={handlePaymentComplete} />
+            ) : (
+              <div>
+                <div className="bg-yellow-50 border border-yellow-200 p-4 rounded mb-4">
+                  <p className="text-yellow-800">
+                    Payment is required to start this order. Your payment will be held in escrow until the order is completed.
+                  </p>
                 </div>
-              )}
-              
-              {/* Review Work Section */}
-              {order.status === 'under_review' && order.paymentStatus === 'in_escrow' && (
-                <div>
-                  <div className="bg-blue-50 border border-blue-200 p-4 rounded mb-4">
-                    <p className="text-blue-800">
-                      The freelancer has delivered the work. Please review it and either accept or request revisions.
-                    </p>
-                  </div>
-                  <div className="flex space-x-4">
-                    <button
-                      onClick={handleReleasePayment}
-                      className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"
-                    >
-                      Accept & Release Payment
-                    </button>
-                    <button
-                      onClick={() => handleStatusChange('in_progress')}
-                      className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded"
-                    >
-                      Request Revisions
-                    </button>
-                  </div>
-                </div>
-              )}
-              
-              {/* Cancel Order */}
-              {['pending', 'in_progress'].includes(order.status) && (
-<div className="mt-6">
-  <button
-    onClick={handleCancelOrder}
-    className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded"
-  >
-    Cancel Order & Request Refund
-  </button>
-</div>
-
-              )}
+                <button
+                  onClick={() => setShowPaymentForm(true)}
+                  className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"
+                >
+                  Pay Now (BMS {order.price.toFixed(2)})
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Review Work Section - Only when work is delivered and payment is in escrow */}
+        {order.status === 'under_review' && order.paymentStatus === 'in_escrow' && (
+          <div>
+            <div className="bg-blue-50 border border-blue-200 p-4 rounded mb-4">
+              <p className="text-blue-800">
+                The freelancer has delivered the work. Please review it and either accept or request revisions.
+              </p>
             </div>
-          )}
-          
-          {/* Freelancer Actions */}
-          {isFreelancer && (
-            <div className="space-y-4">
-              {/* Accept Order */}
-              {order.status === 'pending' && order.paymentStatus === 'in_escrow' && (
-                <div>
-                  <div className="bg-blue-50 border border-blue-200 p-4 rounded mb-4">
-                    <p className="text-blue-800">
-                      New order received with payment in escrow! Accept it to start working.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleStatusChange('in_progress')}
-                    className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
-                  >
-                    Accept Order
-                  </button>
-                </div>
-              )}
-              
-              {/* Deliver Work */}
-              {order.status === 'in_progress' && (
-                <div>
-                  {deliveryError && (
-                    <div className="bg-red-100 text-red-700 p-4 rounded mb-4">
-                      {deliveryError}
-                    </div>
-                  )}
-                  {deliverySuccess && (
-                    <div className="bg-green-100 text-green-700 p-4 rounded mb-4">
-                      {deliverySuccess}
-                    </div>
-                  )}
-                  
-                  <form onSubmit={handleDeliverySubmit}>
-                    <div className="mb-4">
-                      <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="description">
-                        Delivery Message
-                      </label>
-                      <textarea
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-                        id="description"
-                        name="description"
-                        rows="4"
-                        value={deliveryForm.description}
-                        onChange={handleDeliveryFormChange}
-                        placeholder="Describe what you're delivering..."
-                        required
-                      ></textarea>
-                    </div>
-                    
-                    <div className="mb-4">
-                      <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="attachments">
-                        Attachments
-                      </label>
-                      <input
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-                        type="file"
-                        id="attachments"
-                        name="attachments"
-                        onChange={handleFileChange}
-                        multiple
-                      />
-                      <p className="mt-1 text-sm text-gray-500">
-                        Upload files related to your delivery.
-                      </p>
-                    </div>
-                    
-                    <button
-                      type="submit"
-                      className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"
-                      disabled={isSubmitting}
-                    >
-                      {isSubmitting ? 'Submitting...' : 'Deliver Work'}
-                    </button>
-                  </form>
-                </div>
-              )}
+            <div className="flex space-x-4">
+              <button
+                onClick={handleReleasePayment}
+                className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"
+              >
+                Accept & Release Payment
+              </button>
+              <button
+                onClick={() => handleStatusChange('in_progress')}
+                className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded"
+              >
+                Request Revisions
+              </button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+        
+        {/* Cancel Order - Only when order is active and payment is in escrow */}
+        {['pending', 'in_progress'].includes(order.status) && order.paymentStatus === 'in_escrow' && (
+          <div className="mt-6">
+            <button
+              onClick={handleCancelOrder}
+              className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded"
+            >
+              Cancel Order & Request Refund
+            </button>
+          </div>
+        )}
       </div>
+    )}
+    
+    {/* Freelancer Actions */}
+    {isFreelancer && (
+      <div className="space-y-4">
+        {/* Accept Order - Only when order is pending and payment is in escrow */}
+        {order.status === 'pending' && order.paymentStatus === 'in_escrow' && (
+          <div>
+            <div className="bg-blue-50 border border-blue-200 p-4 rounded mb-4">
+              <p className="text-blue-800">
+                New order received with payment in escrow! Accept it to start working.
+              </p>
+            </div>
+            <button
+              onClick={() => handleStatusChange('in_progress')}
+              className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+            >
+              Accept Order
+            </button>
+          </div>
+        )}
+        
+        {/* Deliver Work - Only when order is in progress */}
+        {order.status === 'in_progress' && order.paymentStatus === 'in_escrow' && (
+          <div>
+            {deliveryError && (
+              <div className="bg-red-100 text-red-700 p-4 rounded mb-4">
+                {deliveryError}
+              </div>
+            )}
+            {deliverySuccess && (
+              <div className="bg-green-100 text-green-700 p-4 rounded mb-4">
+                {deliverySuccess}
+              </div>
+            )}
+            
+            <form onSubmit={handleDeliverySubmit}>
+              <div className="mb-4">
+                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="description">
+                  Delivery Message
+                </label>
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                  id="description"
+                  name="description"
+                  rows="4"
+                  value={deliveryForm.description}
+                  onChange={handleDeliveryFormChange}
+                  placeholder="Describe what you're delivering..."
+                  required
+                ></textarea>
+              </div>
+              
+              <div className="mb-4">
+                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="attachments">
+                  Attachments
+                </label>
+                <input
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                  type="file"
+                  id="attachments"
+                  name="attachments"
+                  onChange={handleFileChange}
+                  multiple
+                />
+                <p className="mt-1 text-sm text-gray-500">
+                  Upload files related to your delivery.
+                </p>
+              </div>
+              
+              <button
+                type="submit"
+                className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Submitting...' : 'Deliver Work'}
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
+    )}
+  </div>
+</div>
       
       {/* Delivered Work */}
       {order.deliveredWork && order.deliveredWork.length > 0 && (
