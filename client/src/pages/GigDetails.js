@@ -13,7 +13,8 @@ const GigDetails = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
-  
+  const [isContactLoading, setIsContactLoading] = useState(false);
+
   useEffect(() => {
     fetchGigDetails();
   }, [id]);
@@ -44,9 +45,26 @@ const GigDetails = () => {
     }
   };
   
-  const handleContactFreelancer = () => {
-    // In a real implementation, this would create a conversation
-    navigate('/messages');
+  const handleContactFreelancer = async () => {
+    try {
+      setError('');
+      setIsContactLoading(true);
+      
+      // Create or get conversation with this gig owner
+      const response = await api.get(`/messages/conversation/user/${gig.owner._id}`);
+      const conversationId = response.data._id;
+      
+      // Navigate to the conversation
+      navigate(`/messages/${conversationId}`);
+    } catch (err) {
+      console.error('Error starting conversation:', err);
+      setError(err.response?.data?.message || 'Failed to start conversation');
+      
+      // Show an alert since we don't know if toast is available
+      alert('Failed to start conversation. Please try again.');
+    } finally {
+      setIsContactLoading(false);
+    }
   };
   
   if (isLoading) {

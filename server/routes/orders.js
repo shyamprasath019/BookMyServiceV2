@@ -150,7 +150,7 @@ router.post('/from-bid/:bidId', verifyToken, isActiveClient , async (req, res, n
   });
   
  // Update order status (based on role)
-router.patch('/:id/status', verifyToken, async (req, res, next) => {
+ router.patch('/:id/status', verifyToken, async (req, res, next) => {
   try {
     const { status } = req.body;
     const order = await Order.findById(req.params.id);
@@ -199,6 +199,9 @@ router.patch('/:id/status', verifyToken, async (req, res, next) => {
         if (order.paymentStatus === 'in_escrow') {
           order.paymentStatus = 'released';
         }
+      } else if (status === 'in_progress' && order.status === 'under_review') {
+        // Allow client to request revisions, changing status back to in_progress
+        order.status = 'in_progress';
       } else {
         return res.status(400).json({ message: 'Invalid status change for client' });
       }

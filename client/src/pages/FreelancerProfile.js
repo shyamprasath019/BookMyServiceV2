@@ -42,10 +42,34 @@ const FreelancerProfile = () => {
     }
   };
   
-  const handleContactFreelancer = () => {
-    // In a real implementation, this would create a conversation
-    // For the prototype, we'll just navigate to messages
-    navigate('/messages');
+  const handleContactFreelancer = async () => {
+    try {
+      setError('');
+      
+      // Show loading indication
+      const loadingToast = toast ? toast.loading('Starting conversation...') : null;
+      
+      // Create or get conversation with this freelancer
+      const response = await api.get(`/messages/conversation/user/${freelancer._id}`);
+      const conversationId = response.data._id;
+      
+      // Dismiss loading toast if toasts are available
+      if (loadingToast && toast) {
+        toast.dismiss(loadingToast);
+        toast.success('Conversation started');
+      }
+      
+      // Navigate to the conversation
+      navigate(`/messages/${conversationId}`);
+    } catch (err) {
+      console.error('Error starting conversation:', err);
+      setError(err.response?.data?.message || 'Failed to start conversation');
+      
+      // Show error toast if toasts are available
+      if (toast) {
+        toast.error('Failed to start conversation');
+      }
+    }
   };
   
   // Render star rating
@@ -205,8 +229,9 @@ const FreelancerProfile = () => {
                   <button
                     onClick={handleContactFreelancer}
                     className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded"
+                    disabled={isContactLoading}
                   >
-                    Contact
+                    {isContactLoading ? 'Starting Chat...' : 'Contact'}
                   </button>
                 </div>
               )}

@@ -37,6 +37,48 @@ router.get('/conversation/order/:orderId', verifyToken, async (req, res, next) =
   }
 });
 
+router.get('/conversation/user/:userId', verifyToken, async (req, res, next) => {
+  try {
+    const targetUserId = req.params.userId;
+    const currentUserId = req.user.id;
+    
+    // Don't allow conversations with yourself
+    if (targetUserId === currentUserId) {
+      return res.status(400).json({ message: 'Cannot create a conversation with yourself' });
+    }
+    
+    // Verify the target user exists
+    const targetUser = await User.findById(targetUserId);
+    if (!targetUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Find existing conversation between these two users (that isn't tied to an order)
+    let conversation = await Conversation.findOne({
+      participants: { $all: [currentUserId, targetUserId] },
+      order: { $exists: false }
+    });
+    
+    // If no conversation exists, create a new one
+    if (!conversation) {
+      conversation = new Conversation({
+        participants: [currentUserId, targetUserId]
+        // No order associated with this conversation
+      });
+      
+      await conversation.save();
+    }
+    
+    // Populate participant information
+    await conversation.populate('participants', 'username profileImage');
+    
+    // Return the conversation
+    res.status(200).json(conversation);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Get all conversations for current user
 router.get('/conversations', verifyToken, async (req, res, next) => {
   try {

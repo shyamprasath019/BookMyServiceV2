@@ -26,7 +26,16 @@ const Conversation = () => {
   const fileInputRef = useRef(null);
   
   useEffect(() => {
-    fetchConversation();
+    if (id) {
+      // Reset messages and state when conversation ID changes
+      setMessages([]);
+      setPage(1);
+      setHasMore(true);
+      setError('');
+      
+      // Fetch the new conversation
+      fetchConversation();
+    }
   }, [id]);
   
   useEffect(() => {
@@ -42,19 +51,33 @@ const Conversation = () => {
   
   const fetchConversation = async () => {
     setLoading(true);
+    setError('');
     try {
+      // Try to get the conversation directly by ID first
       const response = await api.get(`/messages/conversation/${id}`);
       setConversation(response.data);
     } catch (err) {
       if (err.response?.status === 404) {
-        // Try to create conversation from order ID
+        // If conversation doesn't exist directly, try alternate methods
+        
+        // First, try to get/create a conversation for an order with this ID
         try {
+          console.log("Trying to get/create order-based conversation...");
           const orderResponse = await api.get(`/messages/conversation/order/${id}`);
           setConversation(orderResponse.data);
         } catch (orderErr) {
-          setError(orderErr.response?.data?.message || 'Conversation not found');
+          // If order-based conversation fails, maybe it's a user ID
+          try {
+            console.log("Trying to get/create user-based conversation...");
+            const userResponse = await api.get(`/messages/conversation/user/${id}`);
+            setConversation(userResponse.data);
+          } catch (userErr) {
+            console.error("All conversation creation methods failed:", userErr);
+            setError('Conversation not found. The ID provided is not valid.');
+          }
         }
       } else {
+        console.error("Error fetching conversation:", err);
         setError(err.response?.data?.message || 'Failed to load conversation');
       }
     } finally {
@@ -279,9 +302,10 @@ const Conversation = () => {
   }
   
   // Determine the other participant
-  const otherParticipant = conversation.participants.find(
-    participant => participant._id !== currentUser._id
-  );
+  const otherParticipant = conversation?.participants?.find(
+    participant => participant._id !== currentUser?._id
+  ) || { username: 'User', profileImage: null };
+  
   
   return (
     <div className="max-w-4xl mx-auto mt-20 bg-white shadow rounded-lg overflow-hidden">

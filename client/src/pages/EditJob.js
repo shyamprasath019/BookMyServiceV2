@@ -52,21 +52,31 @@ const EditJob = () => {
           return;
         }
         
+        // Make sure all necessary fields are populated from the API response
         setFormData({
-          title: job.title,
-          description: job.description,
-          category: job.category,
+          title: job.title || '',
+          description: job.description || '',
+          category: job.category || '',
           subCategory: job.subCategory || '',
           budget: {
-            min: job.budget.min,
-            max: job.budget.max
+            min: job.budget?.min || '',
+            max: job.budget?.max || ''
           },
           deadline: job.deadline ? new Date(job.deadline).toISOString().split('T')[0] : '',
-          skills: job.skills
+          skills: job.skills || [],
+          location: {
+            type: job.location?.type || 'remote',
+            address: job.location?.address || '',
+            city: job.location?.city || '',
+            state: job.location?.state || '',
+            country: job.location?.country || '',
+            postalCode: job.location?.postalCode || ''
+          }
         });
       } catch (err) {
-        setError('Failed to fetch job details');
-        console.error(err);
+        console.error('Error fetching job details:', err);
+        setError(err.response?.data?.message || 'Failed to fetch job details');
+        navigate('/dashboard');
       } finally {
         setIsLoading(false);
       }
@@ -124,22 +134,30 @@ const EditJob = () => {
     }
     
     try {
-      // Update job
-      await api.put(`/jobs/${id}`, {
+      // Create job data object with properly formatted fields
+      const jobData = {
         title: formData.title,
         description: formData.description,
         category: formData.category,
-        subCategory: formData.subCategory,
+        subCategory: formData.subCategory || undefined,
         budget: {
           min: parseInt(formData.budget.min),
           max: parseInt(formData.budget.max)
         },
-        deadline: formData.deadline || null,
-        skills: formData.skills
-      });
+        deadline: formData.deadline || undefined,
+        skills: formData.skills,
+        location: formData.location
+      };
       
-      navigate(`/jobs/${id}`);
+      // Update job with formatted data
+      const response = await api.put(`/jobs/${id}`, jobData);
+      
+      if (response.status === 200) {
+        alert('Job updated successfully!');
+        navigate(`/jobs/${id}`);
+      }
     } catch (err) {
+      console.error('Error updating job:', err);
       setError(err.response?.data?.message || 'Failed to update job');
     } finally {
       setIsLoading(false);

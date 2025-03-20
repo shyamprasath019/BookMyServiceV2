@@ -49,6 +49,19 @@ const BidForm = ({ job, onBidSubmitted, userHasBid }) => {
       setError('Please enter a valid delivery time');
       return false;
     }
+
+    // Check if delivery time exceeds deadline (if job has a deadline)
+  if (job.deadline) {
+    const deadlineDate = new Date(job.deadline);
+    const currentDate = new Date();
+    const deliveryDate = new Date();
+    deliveryDate.setDate(currentDate.getDate() + deliveryTime);
+    
+    if (deliveryDate > deadlineDate) {
+      setError(`Delivery time exceeds the job deadline (${new Date(job.deadline).toLocaleDateString()}). Please provide a shorter delivery timeline.`);
+      return false;
+    }
+  }
     
     // Validate proposal
     if (formData.proposal.trim().length < 30) {

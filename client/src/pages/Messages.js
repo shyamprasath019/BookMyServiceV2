@@ -16,6 +16,10 @@ const Messages = () => {
   const [selectedTab, setSelectedTab] = useState('all');
   
   useEffect(() => {
+    handleRedirectFromContact();
+  }, []);
+
+  useEffect(() => {
     fetchConversations();
   }, []);
   
@@ -65,20 +69,102 @@ const Messages = () => {
     setIsLoading(true);
     try {
       const response = await api.get('/messages/conversations');
-      setConversations(response.data);
-      setFilteredConversations(response.data);
+      
+      // Populate conversations with more data
+      if (response.data && Array.isArray(response.data)) {
+        // Sort conversations by most recent first
+        const sortedConversations = response.data.sort((a, b) => 
+          new Date(b.updatedAt) - new Date(a.updatedAt)
+        );
+        
+        setConversations(sortedConversations);
+        setFilteredConversations(sortedConversations);
+      } else {
+        setConversations([]);
+        setFilteredConversations([]);
+      }
     } catch (err) {
+      console.error('Error fetching conversations:', err);
       setError(err.response?.data?.message || 'Failed to load conversations');
+      setConversations([]);
+      setFilteredConversations([]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleRedirectFromContact = () => {
+    const params = new URLSearchParams(window.location.search);
+    const targetUserId = params.get('user');
+    const orderId = params.get('order');
+    
+    // If there's a userId or orderId in the URL, try to create a conversation and redirect
+    if (targetUserId || orderId) {
+      // Set loading indication
+      setIsLoading(true);
+      
+      const fetchInitialConversation = async () => {
+        try {
+          let response;
+          
+          if (targetUserId) {
+            // Create/get conversation with this user
+            response = await api.get(`/messages/conversation/user/${targetUserId}`);
+          } else if (orderId) {
+            // Create/get conversation for this order
+            response = await api.get(`/messages/conversation/order/${orderId}`);
+          }
+          
+          if (response && response.data && response.data._id) {
+            // Navigate to the new conversation
+            navigate(`/messages/${response.data._id}`, { replace: true });
+            return; // Exit the function after redirect
+          }
+        } catch (err) {
+          console.error('Error creating conversation from params:', err);
+          setError('Failed to start requested conversation');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      
+      fetchInitialConversation();
     }
   };
   
   // Get the other participant for each conversation
   const getOtherParticipant = (conversation) => {
-    return conversation.participants.find(
-      participant => participant._id !== currentUser._id
+    if (!conversation || !conversation.participants || !Array.isArray(conversation.participants)) {
+      // Return a default participant object if data is invalid
+      return { username: 'User', _id: 'unknown', profileImage: null };
+    }
+    
+    // Find participant who is not the current user
+    const otherParticipant = conversation.participants.find(
+      participant => participant && participant._id !== currentUser?._id
     );
+    
+    // Return the other participant or a default object if not found
+    return otherParticipant || { username: 'User', _id: 'unknown', profileImage: null };
+  };
+
+  const startNewConversation = async (userId) => {
+    if (!userId) return;
+    
+    try {
+      setIsLoading(true);
+      const response = await api.get(`/messages/conversation/user/${userId}`);
+      
+      if (response.data && response.data._id) {
+        // Navigate to the new conversation
+        navigate(`/messages/${response.data._id}`);
+      }
+    } catch (err) {
+      console.error('Error starting new conversation:', err);
+      setError('Failed to start new conversation');
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   // Format timestamp to show either time or date
@@ -215,11 +301,14 @@ const Messages = () => {
         </div>
         
         {filteredConversations.length === 0 ? (
-          <div className="p-8 text-center">
+            <div className="p-8 text-center">
             {conversations.length === 0 ? (
               <>
                 <div className="text-6xl mb-4">💬</div>
                 <p className="text-gray-500 mb-4">You don't have any messages yet.</p>
+                <p className="text-gray-500 mb-4">
+                  Start a conversation by contacting a freelancer or responding to a job request.
+                </p>
                 <Link
                   to="/dashboard"
                   className="text-blue-500 hover:underline"

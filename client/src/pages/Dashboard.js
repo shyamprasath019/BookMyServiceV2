@@ -78,6 +78,51 @@ const Dashboard = () => {
       };
     }
   };
+
+  const toggleGigStatus = async (gigId) => {
+    try {
+      // Find the gig to update
+      const gigToUpdate = gigs.find(gig => gig._id === gigId);
+      if (!gigToUpdate) return;
+      
+      // Set loading state for this specific gig
+      setGigs(prevGigs => 
+        prevGigs.map(gig => 
+          gig._id === gigId ? { ...gig, isToggling: true } : gig
+        )
+      );
+      
+      // Call the API to toggle status
+      const response = await api.patch(`/gigs/${gigId}/toggle-active`);
+      
+      // Update the gig in the local state with the response
+      if (response.data) {
+        setGigs(prevGigs => 
+          prevGigs.map(gig => 
+            gig._id === gigId ? { ...response.data, isToggling: false } : gig
+          )
+        );
+      }
+    } catch (err) {
+      console.error('Error toggling gig status:', err);
+      
+      // Remove loading state and show error
+      setGigs(prevGigs => 
+        prevGigs.map(gig => 
+          gig._id === gigId ? { ...gig, isToggling: false, toggleError: err.response?.data?.message || 'Failed to update status' } : gig
+        )
+      );
+      
+      // Clear error after 3 seconds
+      setTimeout(() => {
+        setGigs(prevGigs => 
+          prevGigs.map(gig => 
+            gig._id === gigId ? { ...gig, toggleError: null } : gig
+          )
+        );
+      }, 3000);
+    }
+  };
   
   if (isLoading) {
     return (
@@ -415,8 +460,13 @@ const Dashboard = () => {
             {gigs.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {gigs.map((gig) => (
-                  <div key={gig._id} className="border rounded-lg overflow-hidden hover:shadow-md transition">
-                    <div className="h-40 bg-gray-200">
+                  <div 
+                    key={gig._id} 
+                    className={`border rounded-lg overflow-hidden hover:shadow-md transition ${
+                      !gig.isActive ? 'opacity-70' : ''
+                    }`}
+                  >
+                    <div className="h-40 bg-gray-200 relative">
                       {gig.images && gig.images.length > 0 ? (
                         <img
                           src={gig.images[0]}
@@ -428,15 +478,49 @@ const Dashboard = () => {
                           No Image
                         </div>
                       )}
+                      
+                      {/* Status Badge */}
+                      <div className="absolute top-2 right-2">
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          gig.isActive 
+                            ? 'bg-green-100 text-green-700' 
+                            : 'bg-red-100 text-red-700'
+                        }`}>
+                          {gig.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
                     </div>
                     <div className="p-4">
-                      <h3 className="font-bold text-lg mb-2 line-clamp-2 min-h-[3rem]">{gig.title}</h3>
+                      <h3 className="font-bold text-lg mb-2 line-clamp-2 min-h-[50px]">{gig.title}</h3>
                       <p className="text-gray-700 text-sm mb-4 line-clamp-2">
                         {gig.description}
                       </p>
+
+                      {/* Error message display */}
+                      {gig.toggleError && (
+                        <p className="text-red-500 text-xs mb-2">{gig.toggleError}</p>
+                      )}
+                      
                       <div className="flex justify-between items-center">
                         <span className="font-bold text-lg">BMS {gig.price.toFixed(2)}</span>
                         <div className="flex space-x-2">
+                          {/* Toggle Status Button */}
+                          <button
+                            onClick={() => toggleGigStatus(gig._id)}
+                            disabled={gig.isToggling}
+                            className={`px-3 py-1 rounded-md text-sm font-medium ${
+                              gig.isActive 
+                                ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
+                                : 'bg-green-100 text-green-700 hover:bg-green-200'
+                            }`}
+                          >
+                            {gig.isToggling 
+                              ? 'Updating...' 
+                              : gig.isActive 
+                                ? 'Deactivate' 
+                                : 'Activate'
+                            }
+                          </button>
                           <Link
                             to={`/gigs/${gig._id}/edit`}
                             className="bg-blue-100 text-blue-600 px-3 py-1 rounded text-sm"

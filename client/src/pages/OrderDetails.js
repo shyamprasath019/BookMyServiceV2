@@ -33,6 +33,9 @@ const OrderDetails = () => {
   const [reviewError, setReviewError] = useState('');
   const [reviewSuccess, setReviewSuccess] = useState('');
   
+  const [orderConversation, setOrderConversation] = useState(null);
+  const [conversationLoading, setConversationLoading] = useState(false);
+  
   useEffect(() => {
     fetchOrderDetails();
   }, [id]);
@@ -144,12 +147,25 @@ const OrderDetails = () => {
   
   const handleStatusChange = async (status) => {
     try {
-      await api.patch(`/orders/${id}/status`, { status });
+      setError(''); // Clear any previous errors
       
-      // Refresh order data
-      fetchOrderDetails();
+      // Call the API to update the order status
+      const response = await api.patch(`/orders/${id}/status`, { status });
+      
+      if (response.data) {
+        // Update the local order state with the updated order
+        setOrder(response.data);
+        
+        // Show success message based on the status change
+        if (status === 'in_progress') {
+          alert('Request for revisions has been sent to the freelancer.');
+        } else if (status === 'completed') {
+          alert('Order has been marked as completed.');
+        }
+      }
     } catch (err) {
-      setError('Failed to update order status');
+      console.error('Error updating order status:', err);
+      setError(err.response?.data?.message || 'Failed to update order status. Please try again.');
     }
   };
   
@@ -189,6 +205,27 @@ const OrderDetails = () => {
       </div>
     );
   }
+
+  // Add this function to get or create a conversation for the order
+  const getOrderConversation = async () => {
+    setConversationLoading(true);
+    try {
+      const response = await api.get(`/messages/conversation/order/${order._id}`);
+      setOrderConversation(response.data);
+    } catch (err) {
+      console.error('Error getting order conversation:', err);
+      setError('Failed to get conversation for this order');
+    } finally {
+      setConversationLoading(false);
+    }
+  };
+
+  // Add this useEffect to load the conversation when the order data is available
+  useEffect(() => {
+    if (order && order._id) {
+      getOrderConversation();
+    }
+  }, [order]);
   
   // Determine user role in this order
   const isClient = activeRole === 'client';
@@ -724,12 +761,30 @@ const OrderDetails = () => {
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="p-6">
           <h2 className="text-xl font-bold mb-4">Message Center</h2>
-          <Link 
-            to={`/messages/${order._id}`}
-            className="inline-block bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
-          >
-            Open Message Center
-          </Link>
+          
+          {conversationLoading ? (
+            <div className="flex items-center space-x-2">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+              <span className="text-gray-500">Loading message center...</span>
+            </div>
+          ) : orderConversation ? (
+            <Link 
+              to={`/messages/${orderConversation._id}`}
+              className="inline-block bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+            >
+              Open Message Center
+            </Link>
+          ) : (
+            <div className="text-red-500">
+              Failed to load messaging center. Please try again.
+              <button
+                onClick={getOrderConversation}
+                className="ml-3 text-blue-500 underline"
+              >
+                Retry
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

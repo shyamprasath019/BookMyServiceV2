@@ -15,7 +15,8 @@ const JobDetails = () => {
   const [userBid, setUserBid] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  
+  const [contactingBidId, setContactingBidId] = useState(null);
+
   useEffect(() => {
     fetchJobDetails();
   }, [id]);
@@ -49,7 +50,47 @@ const JobDetails = () => {
       setIsLoading(false);
     }
   };
+
+  const toggleJobStatus = async () => {
+    try {
+      setError('');
+      
+      // Create update object - only changing isActive status
+      const updateData = {
+        isActive: !job.isActive
+      };
+      
+      // Update the job
+      const response = await api.put(`/jobs/${id}`, updateData);
+      
+      // Update local job state
+      setJob(prev => ({
+        ...prev,
+        isActive: !prev.isActive
+      }));
+      
+      // Show success message
+      alert(`Job has been ${job.isActive ? 'deactivated' : 'activated'}`);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update job status');
+    }
+  };
   
+  const handleDeleteJob = async () => {
+    if (window.confirm('Are you sure you want to delete this job? This action cannot be undone.')) {
+      try {
+        setError('');
+        await api.delete(`/jobs/${id}`);
+        
+        // Show success message and redirect
+        alert('Job deleted successfully');
+        navigate('/dashboard');
+      } catch (err) {
+        setError(err.response?.data?.message || 'Failed to delete job');
+      }
+    }
+  };
+
   const handleBidSubmitted = (newBid) => {
     setUserBid(newBid);
     
@@ -81,6 +122,24 @@ const JobDetails = () => {
       );
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to reject bid');
+    }
+  };
+
+  const handleContactBidder = async (freelancerId, bidId) => {
+    try {
+      setError('');
+      setContactingBidId(bidId);
+      
+      // Create or get conversation with this freelancer
+      const response = await api.get(`/messages/conversation/user/${freelancerId}`);
+      const conversationId = response.data._id;
+      
+      // Navigate to the conversation
+      navigate(`/messages/${conversationId}`);
+    } catch (err) {
+      console.error('Error starting conversation:', err);
+      setError(err.response?.data?.message || 'Failed to start conversation');
+      setContactingBidId(null);
     }
   };
   
@@ -157,11 +216,19 @@ const JobDetails = () => {
               </div>
               <div className="text-sm text-gray-500">Budget Range</div>
               {job.deadline && (
-                <div className="mt-2 text-sm">
-                  <span className="text-gray-600">Deadline:</span> 
-                  <span className="font-semibold ml-1">
-                    {new Date(job.deadline).toLocaleDateString()}
-                  </span>
+                <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <span className="font-semibold text-yellow-800">Deadline: </span>
+                      <span className="text-yellow-800">{new Date(job.deadline).toLocaleDateString()}</span>
+                      <p className="text-sm text-yellow-700 mt-1">
+                        Your delivery timeline must not exceed this deadline. Plan your bid accordingly.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -228,6 +295,44 @@ const JobDetails = () => {
             onBidSubmitted={handleBidSubmitted} 
             userHasBid={hasPlacedBid}
           />
+        </div>
+      )}
+
+      {isJobOwner && (
+        <div className="mt-8 border-t pt-6 mb-8">
+          <h3 className="text-lg font-semibold mb-3">Job Management</h3>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              to={`/jobs/${id}/edit`}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+            >
+              Edit Job
+            </Link>
+            
+            <button
+              onClick={toggleJobStatus}
+              className={`px-4 py-2 rounded text-white ${
+                job.isActive 
+                  ? 'bg-yellow-500 hover:bg-yellow-600' 
+                  : 'bg-green-500 hover:bg-green-600'
+              }`}
+            >
+              {job.isActive ? 'Deactivate Job' : 'Activate Job'}
+            </button>
+            
+            <button
+              onClick={handleDeleteJob}
+              className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
+            >
+              Delete Job
+            </button>
+          </div>
+          
+          {!job.isActive && (
+            <p className="mt-3 text-sm text-gray-500">
+              Note: This job is currently inactive. Freelancers cannot see or bid on inactive jobs.
+            </p>
+          )}
         </div>
       )}
       
@@ -320,10 +425,11 @@ const JobDetails = () => {
                               Reject
                             </button>
                             <button
-                              onClick={() => navigate(`/messages/${conversationId}`)}
+                              onClick={() => handleContactBidder(bid.freelancer._id, bid._id)}
                               className="bg-blue-500 hover:bg-blue-600 text-white text-xs px-3 py-1 rounded"
+                              disabled={contactingBidId === bid._id}
                             >
-                              Contact
+                              {contactingBidId === bid._id ? 'Starting Chat...' : 'Contact'}
                             </button>
                           </div>
                         )}
