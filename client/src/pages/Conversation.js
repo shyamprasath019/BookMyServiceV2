@@ -2,564 +2,210 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import { useWebSocketContext } from '../utils/websocketService';
 import api from '../utils/api';
 import fileUploadService from '../utils/fileUploadService';
 
-const Conversation = () => {
-  const { id } = useParams(); // This is the conversation ID
-  const { currentUser } = useContext(AuthContext);
+const ConversationHeader = ({ conversation, otherParticipant, isLoading }) => {
   const navigate = useNavigate();
   
-  const [conversation, setConversation] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [attachments, setAttachments] = useState([]);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isSending, setIsSending] = useState(false);
+  if (isLoading || !conversation) {
+    return (
+      <div className="bg-blue-500 text-white p-4 flex items-center">
+        <div className="animate-pulse flex items-center">
+          <div className="bg-blue-400 h-10 w-10 rounded-full mr-3"></div>
+          <div className="h-4 bg-blue-400 rounded w-24"></div>
+        </div>
+      </div>
+    );
+  }
   
-  const messagesEndRef = useRef(null);
-  const messageContainerRef = useRef(null);
-  const fileInputRef = useRef(null);
-  
-  useEffect(() => {
-    if (id) {
-      // Reset messages and state when conversation ID changes
-      setMessages([]);
-      setPage(1);
-      setHasMore(true);
-      setError('');
-      
-      // Fetch the new conversation
-      fetchConversation();
-    }
-  }, [id]);
-  
-  useEffect(() => {
-    if (conversation) {
-      fetchMessages();
-    }
-  }, [conversation, page]);
-  
-  useEffect(() => {
-    // Scroll to bottom when new messages are added
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-  
-  const fetchConversation = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      // Try to get the conversation directly by ID first
-      const response = await api.get(`/messages/conversation/${id}`);
-      setConversation(response.data);
-    } catch (err) {
-      if (err.response?.status === 404) {
-        // If conversation doesn't exist directly, try alternate methods
-        
-        // First, try to get/create a conversation for an order with this ID
-        try {
-          console.log("Trying to get/create order-based conversation...");
-          const orderResponse = await api.get(`/messages/conversation/order/${id}`);
-          setConversation(orderResponse.data);
-        } catch (orderErr) {
-          // If order-based conversation fails, maybe it's a user ID
-          try {
-            console.log("Trying to get/create user-based conversation...");
-            const userResponse = await api.get(`/messages/conversation/user/${id}`);
-            setConversation(userResponse.data);
-          } catch (userErr) {
-            console.error("All conversation creation methods failed:", userErr);
-            setError('Conversation not found. The ID provided is not valid.');
-          }
-        }
-      } else {
-        console.error("Error fetching conversation:", err);
-        setError(err.response?.data?.message || 'Failed to load conversation');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const fetchMessages = async () => {
-    try {
-      const response = await api.get(`/messages/conversation/${conversation._id}/messages?page=${page}`);
-      
-      if (page === 1) {
-        setMessages(response.data.messages);
-      } else {
-        setMessages(prev => [...response.data.messages, ...prev]);
-      }
-      
-      setHasMore(page < response.data.totalPages);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load messages');
-    }
-  };
-  
-  const loadMoreMessages = () => {
-    if (hasMore) {
-      setPage(prev => prev + 1);
-    }
-  };
-  
-  const handleFileChange = async (e) => {
-    const files = Array.from(e.target.files);
-    
-    if (files.length === 0) return;
-    
-    // Validate files (max 5 files, each max 5MB)
-    if (files.length > 5) {
-      setError('You can upload a maximum of 5 files at once');
-      return;
-    }
-    
-    const oversizedFiles = files.filter(file => file.size > 5 * 1024 * 1024);
-    if (oversizedFiles.length > 0) {
-      setError(`Some files exceed the 5MB limit: ${oversizedFiles.map(f => f.name).join(', ')}`);
-      return;
-    }
-    
-    setAttachments(files);
-  };
-  
-  const removeAttachment = (index) => {
-    setAttachments(prev => prev.filter((_, i) => i !== index));
-  };
-  
-  const handleOpenFileDialog = () => {
-    fileInputRef.current.click();
-  };
-  
-  const sendMessage = async (e) => {
-    e.preventDefault();
-    
-    if (!newMessage.trim() && attachments.length === 0) {
-      return;
-    }
-    
-    setIsSending(true);
-    setError('');
-    
-    try {
-      let attachmentUrls = [];
-      
-      // Upload attachments if any
-      if (attachments.length > 0) {
-        setIsUploading(true);
-        try {
-          attachmentUrls = await fileUploadService.uploadMessageAttachments(attachments);
-        } catch (uploadErr) {
-          throw new Error('Failed to upload attachments: ' + (uploadErr.message || 'Unknown error'));
-        } finally {
-          setIsUploading(false);
-        }
-      }
-      
-      // Send message with attachments if any
-      const response = await api.post(`/messages/conversation/${conversation._id}`, { 
-        content: newMessage,
-        attachments: attachmentUrls
-      });
-      
-      setMessages(prev => [...prev, response.data]);
-      setNewMessage('');
-      setAttachments([]);
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Failed to send message');
-    } finally {
-      setIsSending(false);
-    }
-  };
-  
-  const formatMessageTime = (timestamp) => {
-    const messageDate = new Date(timestamp);
-    const today = new Date();
-    
-    // If message is from today, show only time
-    if (messageDate.toDateString() === today.toDateString()) {
-      return messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-    
-    // Otherwise show date
-    return messageDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
-  };
-  
-  // Helper to get the proper styling based on the file type
-  const getAttachmentStyle = (fileName) => {
-    const extension = fileUploadService.getFileExtension(fileName).toLowerCase();
-    
-    // Images
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) {
+  const getConversationTypeWithIcon = () => {
+    if (!conversation.order) {
       return {
-        icon: 'image',
-        bgColor: 'bg-blue-100',
-        textColor: 'text-blue-700'
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+        ),
+        title: 'Direct Message'
       };
     }
     
-    // Documents
-    if (['pdf', 'doc', 'docx', 'txt', 'xls', 'xlsx', 'ppt', 'pptx'].includes(extension)) {
+    if (conversation.order.gig) {
       return {
-        icon: 'document',
-        bgColor: 'bg-yellow-100',
-        textColor: 'text-yellow-700'
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+        ),
+        title: 'Gig Order'
       };
     }
     
-    // Code/technical files
-    if (['js', 'jsx', 'ts', 'tsx', 'html', 'css', 'json', 'xml', 'py', 'java', 'c', 'cpp'].includes(extension)) {
+    if (conversation.order.job) {
       return {
-        icon: 'code',
-        bgColor: 'bg-purple-100',
-        textColor: 'text-purple-700'
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+        ),
+        title: 'Job Order'
       };
     }
     
-    // Default
     return {
-      icon: 'file',
-      bgColor: 'bg-gray-100',
-      textColor: 'text-gray-700'
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+        </svg>
+      ),
+      title: 'Order'
     };
   };
   
-  // Render file icon based on type
-  const renderFileIcon = (type) => {
-    if (type === 'image') {
-      return (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-      );
-    }
-    
-    if (type === 'document') {
-      return (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-      );
-    }
-    
-    if (type === 'code') {
-      return (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-        </svg>
-      );
-    }
-    
-    return (
-      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-      </svg>
-    );
-  };
-  
-  if (loading && !conversation) {
-    return (
-      <div className="flex justify-center items-center py-12">
-        <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-        <p className="ml-2">Loading conversation...</p>
-      </div>
-    );
-  }
-  
-  if (error) {
-    return (
-      <div className="max-w-4xl mx-auto mt-20 p-8 bg-white shadow rounded-lg">
-        <div className="bg-red-100 text-red-700 p-4 rounded mb-4">
-          {error}
-        </div>
-        <button
-          onClick={() => navigate('/messages')}
-          className="text-blue-500 hover:underline"
-        >
-          &larr; Back to Messages
-        </button>
-      </div>
-    );
-  }
-  
-  if (!conversation) {
-    return (
-      <div className="max-w-4xl mx-auto mt-20 p-8 bg-white shadow rounded-lg">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">Conversation Not Found</h2>
-          <p className="text-gray-600 mb-4">The conversation you're looking for doesn't exist or you don't have access to it.</p>
-          <Link to="/messages" className="text-blue-500 hover:underline">
-            &larr; Back to Messages
-          </Link>
-        </div>
-      </div>
-    );
-  }
-  
-  // Determine the other participant
-  const otherParticipant = conversation?.participants?.find(
-    participant => participant._id !== currentUser?._id
-  ) || { username: 'User', profileImage: null };
-  
+  const { icon, title } = getConversationTypeWithIcon();
   
   return (
-    <div className="max-w-4xl mx-auto mt-20 bg-white shadow rounded-lg overflow-hidden">
-      {/* Conversation Header */}
-      <div className="bg-blue-500 text-white p-4 flex justify-between items-center sticky top-0 z-10">
-        <div className="flex items-center">
-          <div className="h-10 w-10 rounded-full bg-white text-blue-500 flex items-center justify-center font-bold mr-3 overflow-hidden">
-            {otherParticipant?.profileImage ? (
-              <img
-                src={otherParticipant.profileImage}
-                alt={otherParticipant.username}
-                className="h-10 w-10 rounded-full object-cover"
-              />
-            ) : (
-              otherParticipant?.username.charAt(0).toUpperCase()
-            )}
-          </div>
-          <div>
-            <h3 className="font-bold">{otherParticipant?.username}</h3>
-            {conversation.order && (
-              <p className="text-sm text-blue-100">
-                Order: {conversation.order.title}
-              </p>
-            )}
-          </div>
+    <div className="bg-blue-500 text-white p-4 flex justify-between items-center sticky top-0 z-10">
+      <div className="flex items-center">
+        <button 
+          onClick={() => navigate('/messages')}
+          className="mr-2 md:hidden"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        
+        <div className="h-10 w-10 rounded-full bg-white text-blue-500 flex items-center justify-center font-bold mr-3 overflow-hidden">
+          {otherParticipant?.profileImage ? (
+            <img
+              src={otherParticipant.profileImage}
+              alt={otherParticipant.username}
+              className="h-10 w-10 rounded-full object-cover"
+            />
+          ) : (
+            otherParticipant?.username.charAt(0).toUpperCase()
+          )}
         </div>
         
-        {conversation.order && (
-          <Link
-            to={`/orders/${conversation.order._id}`}
-            className="bg-white text-blue-500 px-3 py-1 rounded text-sm hover:bg-blue-50 transition-colors"
-          >
-            View Order
-          </Link>
-        )}
-      </div>
-      
-      {/* Messages Container */}
-      <div 
-        className="h-[60vh] p-4 overflow-y-auto bg-gray-50"
-        ref={messageContainerRef}
-      >
-        {hasMore && (
-          <div className="text-center mb-4">
-            <button
-              onClick={loadMoreMessages}
-              className="text-blue-500 hover:underline text-sm bg-white px-3 py-1 rounded-full shadow-sm"
-            >
-              Load more messages
-            </button>
-          </div>
-        )}
-        
-        {messages.length === 0 ? (
-          <div className="text-center text-gray-500 my-10">
-            <p>No messages yet. Send the first message to start the conversation!</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {messages.map((message, index) => {
-              const isCurrentUser = message.sender._id === currentUser._id;
-              const showDate = index === 0 || 
-                new Date(message.createdAt).toDateString() !== 
-                new Date(messages[index - 1].createdAt).toDateString();
-              
-              return (
-                <React.Fragment key={message._id}>
-                  {showDate && (
-                    <div className="flex justify-center my-4">
-                      <div className="bg-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full">
-                        {new Date(message.createdAt).toLocaleDateString([], { 
-                          weekday: 'long', 
-                          month: 'short', 
-                          day: 'numeric' 
-                        })}
-                      </div>
-                    </div>
-                  )}
-                
-                  <div className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}>
-                    <div className="flex flex-col max-w-[75%]">
-                      <div className={`flex items-start ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
-                        <div className="h-8 w-8 rounded-full flex-shrink-0 bg-gray-300 flex items-center justify-center text-white overflow-hidden">
-                          {message.sender.profileImage ? (
-                            <img 
-                              src={message.sender.profileImage} 
-                              alt={message.sender.username}
-                              className="h-8 w-8 object-cover"
-                            />
-                          ) : (
-                            <span>{message.sender.username.charAt(0).toUpperCase()}</span>
-                          )}
-                        </div>
-                        <div 
-                          className={`px-4 py-2 rounded-lg mx-2 ${
-                            isCurrentUser 
-                              ? 'bg-blue-500 text-white rounded-tr-none' 
-                              : 'bg-white text-gray-800 rounded-tl-none border border-gray-200'
-                          }`}
-                        >
-                          <div className="break-words">
-                            {message.content}
-                          </div>
-                          
-                          // Continuing from previous artifact
-                          
-                          {message.attachments && message.attachments.length > 0 && (
-                            <div className="mt-2 space-y-1">
-                              {message.attachments.map((attachment, idx) => {
-                                const fileStyle = getAttachmentStyle(attachment);
-                                return (
-                                  <div 
-                                    key={idx}
-                                    className={`flex items-center ${fileStyle.bgColor} ${fileStyle.textColor} px-2 py-1 rounded text-xs`}
-                                  >
-                                    {renderFileIcon(fileStyle.icon)}
-                                    <span className="truncate">{attachment.split('/').pop()}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className={`text-xs mt-1 text-gray-500 ${isCurrentUser ? 'text-right' : 'text-left'}`}>
-                        {formatMessageTime(message.createdAt)}
-                      </div>
-                    </div>
-                  </div>
-                </React.Fragment>
-              );
-            })}
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-      
-      {/* Attachments Preview */}
-      {attachments.length > 0 && (
-        <div className="px-4 pt-2 bg-white border-t">
-          <div className="text-sm font-medium text-gray-700 mb-2">Attachments ({attachments.length})</div>
-          <div className="flex flex-wrap gap-2 mb-2">
-            {attachments.map((file, index) => {
-              const isImage = fileUploadService.isImage(file);
-              const fileSize = fileUploadService.formatFileSize(file.size);
-              
-              return (
-                <div 
-                  key={index} 
-                  className="relative flex items-center border rounded-lg overflow-hidden bg-gray-50 group"
-                >
-                  {isImage ? (
-                    <div className="w-16 h-16 flex-shrink-0 bg-gray-100">
-                      <img 
-                        src={URL.createObjectURL(file)} 
-                        alt={file.name} 
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-12 h-12 flex-shrink-0 flex items-center justify-center bg-gray-100">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                    </div>
-                  )}
-                  
-                  <div className="flex-1 p-2">
-                    <div className="text-xs text-gray-700 truncate max-w-[120px]">{file.name}</div>
-                    <div className="text-xs text-gray-500">{fileSize}</div>
-                  </div>
-                  
-                  <button 
-                    onClick={() => removeAttachment(index)}
-                    className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-80 hover:opacity-100"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-      
-      {/* Message Input */}
-      <div className="p-4 border-t">
-        <form onSubmit={sendMessage} className="flex flex-col">
-          <div className="flex-1 mb-2">
-            <textarea
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-              rows="3"
-              placeholder="Type your message..."
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-            ></textarea>
-          </div>
+        <div>
+          <h3 className="font-bold">{otherParticipant?.username}</h3>
           
-          <div className="flex justify-between items-center">
-            <div className="flex items-center">
-              <button
-                type="button"
-                onClick={handleOpenFileDialog}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded-lg flex items-center transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                </svg>
-                Attach
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  className="hidden"
-                  multiple
-                  onChange={handleFileChange}
-                />
-              </button>
-              
-              {attachments.length > 0 && (
-                <span className="ml-2 text-sm text-gray-600">
-                  {attachments.length} file{attachments.length !== 1 ? 's' : ''} selected
-                </span>
-              )}
-            </div>
+          <div className="flex items-center text-xs text-blue-100">
+            {icon}
+            <span>{title}</span>
             
-            <button
-              type="submit"
-              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition-colors flex items-center"
-              disabled={(!newMessage.trim() && attachments.length === 0) || isSending || isUploading}
-            >
-              {(isSending || isUploading) ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  {isUploading ? 'Uploading...' : 'Sending...'}
-                </>
-              ) : (
-                <>
-                  Send
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                  </svg>
-                </>
-              )}
-            </button>
+            {conversation.order && (
+              <span className="ml-1">: {conversation.order.title}</span>
+            )}
           </div>
-        </form>
+        </div>
       </div>
+      
+      {conversation.order && (
+        <Link
+          to={`/orders/${conversation.order._id}`}
+          className="bg-white text-blue-500 px-3 py-1 rounded text-sm hover:bg-blue-50 transition-colors"
+        >
+          View Order
+        </Link>
+      )}
     </div>
   );
 };
 
-export default Conversation;
+const Message = ({ message, isCurrentUser, showDate, previousMessage }) => {
+  // Determine if we should show sender name (when first message or different sender than previous)
+  const showSenderName = !previousMessage || previousMessage.sender._id !== message.sender._id;
+  
+  // Format date/time
+  const formatTime = (timestamp) => {
+    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+  
+  const formatDate = (timestamp) => {
+    return new Date(timestamp).toLocaleDateString([], { 
+      weekday: 'long', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+  };
+  
+  // Determine message alignment and styling based on sender
+  const messageAlignment = isCurrentUser ? 'justify-end' : 'justify-start';
+  const messageBubbleStyle = isCurrentUser 
+    ? 'bg-blue-500 text-white rounded-tr-none' 
+    : 'bg-white text-gray-800 rounded-tl-none border border-gray-200';
+  
+  // Helper to render file attachments
+  const renderAttachments = (attachments) => {
+    if (!attachments || attachments.length === 0) return null;
+    
+    return (
+      <div className="mt-2 space-y-1">
+        {attachments.map((attachment, idx) => {
+          const fileName = attachment.split('/').pop();
+          const fileExtension = fileName.split('.').pop().toLowerCase();
+          
+          // Determine if attachment is an image
+          const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExtension);
+          
+          if (isImage) {
+            return (
+              <div key={idx} className="rounded overflow-hidden">
+                <img 
+                  src={attachment} 
+                  alt={`Attachment ${idx + 1}`} 
+                  className="max-w-full max-h-60 object-contain"
+                />
+                <div className={`text-xs ${isCurrentUser ? 'text-blue-100' : 'text-gray-500'} mt-1`}>
+                  {fileName}
+                </div>
+              </div>
+            );
+          }
+          
+          // File type icon based on extension
+          const getFileIcon = () => {
+            // Document files
+            if (['pdf', 'doc', 'docx', 'txt', 'rtf'].includes(fileExtension)) {
+              return (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              );
+            }
+            
+            // Spreadsheets
+            if (['xls', 'xlsx', 'csv'].includes(fileExtension)) {
+              return (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+              );
+            }
+            
+            // Code files
+            if (['js', 'jsx', 'ts', 'tsx', 'html', 'css', 'json', 'py', 'java', 'c', 'cpp'].includes(fileExtension)) {
+              return (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+              );
+            }
+            
+            // Archives
+            if (['zip', 'rar', 'tar', 'gz', '7z'].includes(fileExtension)) {
+              return (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
+              );
+            }
+            
+            // Default file icon
+            return (
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l

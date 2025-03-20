@@ -2,75 +2,38 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import { useWebSocketContext } from '../utils/websocketService';
 import api from '../utils/api';
 
 const Messages = () => {
   const { currentUser } = useContext(AuthContext);
+  const { lastMessage, isConnected } = useWebSocketContext();
   const navigate = useNavigate();
   
   const [conversations, setConversations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredConversations, setFilteredConversations] = useState([]);
-  const [selectedTab, setSelectedTab] = useState('all');
+  const [filterByType, setFilterByType] = useState('all'); // 'all', 'direct', 'orders', 'gigs', 'jobs'
+  const [activeCategory, setActiveCategory] = useState('all'); // 'all', 'unread', 'archived'
   
-  useEffect(() => {
-    handleRedirectFromContact();
-  }, []);
-
   useEffect(() => {
     fetchConversations();
   }, []);
   
+  // Refetch when new message received through WebSocket
   useEffect(() => {
-    // Filter conversations based on search query and selected tab
-    if (conversations.length > 0) {
-      let filtered = [...conversations];
-      
-      // Filter by tab
-      if (selectedTab === 'orders') {
-        filtered = filtered.filter(conv => conv.order);
-      } else if (selectedTab === 'unread') {
-        filtered = filtered.filter(conv => conv.unreadCount > 0);
-      }
-      
-      // Filter by search query
-      if (searchQuery.trim() !== '') {
-        const query = searchQuery.toLowerCase();
-        filtered = filtered.filter(conv => {
-          const otherUser = conv.participants.find(p => p._id !== currentUser._id);
-          
-          // Search by user name
-          if (otherUser.username.toLowerCase().includes(query)) {
-            return true;
-          }
-          
-          // Search by order title
-          if (conv.order && conv.order.title.toLowerCase().includes(query)) {
-            return true;
-          }
-          
-          // Search in last message
-          if (conv.lastMessage && conv.lastMessage.content && 
-              conv.lastMessage.content.toLowerCase().includes(query)) {
-            return true;
-          }
-          
-          return false;
-        });
-      }
-      
-      setFilteredConversations(filtered);
+    if (lastMessage && lastMessage.type === 'new_message') {
+      // Refresh conversation list to update last message and unread count
+      fetchConversations();
     }
-  }, [conversations, searchQuery, selectedTab, currentUser]);
+  }, [lastMessage]);
   
   const fetchConversations = async () => {
     setIsLoading(true);
     try {
       const response = await api.get('/messages/conversations');
       
-      // Populate conversations with more data
       if (response.data && Array.isArray(response.data)) {
         // Sort conversations by most recent first
         const sortedConversations = response.data.sort((a, b) => 
@@ -78,97 +41,80 @@ const Messages = () => {
         );
         
         setConversations(sortedConversations);
-        setFilteredConversations(sortedConversations);
-      } else {
-        setConversations([]);
-        setFilteredConversations([]);
       }
     } catch (err) {
       console.error('Error fetching conversations:', err);
       setError(err.response?.data?.message || 'Failed to load conversations');
-      setConversations([]);
-      setFilteredConversations([]);
     } finally {
       setIsLoading(false);
     }
   };
-
-  const handleRedirectFromContact = () => {
-    const params = new URLSearchParams(window.location.search);
-    const targetUserId = params.get('user');
-    const orderId = params.get('order');
-    
-    // If there's a userId or orderId in the URL, try to create a conversation and redirect
-    if (targetUserId || orderId) {
-      // Set loading indication
-      setIsLoading(true);
-      
-      const fetchInitialConversation = async () => {
-        try {
-          let response;
-          
-          if (targetUserId) {
-            // Create/get conversation with this user
-            response = await api.get(`/messages/conversation/user/${targetUserId}`);
-          } else if (orderId) {
-            // Create/get conversation for this order
-            response = await api.get(`/messages/conversation/order/${orderId}`);
-          }
-          
-          if (response && response.data && response.data._id) {
-            // Navigate to the new conversation
-            navigate(`/messages/${response.data._id}`, { replace: true });
-            return; // Exit the function after redirect
-          }
-        } catch (err) {
-          console.error('Error creating conversation from params:', err);
-          setError('Failed to start requested conversation');
-        } finally {
-          setIsLoading(false);
-        }
-      };
-      
-      fetchInitialConversation();
-    }
-  };
   
-  // Get the other participant for each conversation
-  const getOtherParticipant = (conversation) => {
-    if (!conversation || !conversation.participants || !Array.isArray(conversation.participants)) {
-      // Return a default participant object if data is invalid
-      return { username: 'User', _id: 'unknown', profileImage: null };
+  // Filter conversations based on search and type filters
+  const filteredConversations = conversations.filter(conversation => {
+    // First filter by category (all, unread, archived)
+    if (activeCategory === 'unread' && !(conversation.unreadCount > 0)) {
+      return false;
+    }
+    if (activeCategory === 'archived' && !conversation.isArchived) {
+      return false;
     }
     
-    // Find participant who is not the current user
-    const otherParticipant = conversation.participants.find(
-      participant => participant && participant._id !== currentUser?._id
-    );
+    // Then filter by type (all, direct, orders, gigs, jobs)
+    if (filterByType === 'direct' && conversation.order) {
+      return false;
+    }
+    if (filterByType === 'orders' && !conversation.order) {
+      return false;
+    }
+    if (filterByType === 'gigs' && (!conversation.order || !conversation.order.gig)) {
+      return false;
+    }
+    if (filterByType === 'jobs' && (!conversation.order || !conversation.order.job)) {
+      return false;
+    }
     
-    // Return the other participant or a default object if not found
-    return otherParticipant || { username: 'User', _id: 'unknown', profileImage: null };
-  };
-
-  const startNewConversation = async (userId) => {
-    if (!userId) return;
-    
-    try {
-      setIsLoading(true);
-      const response = await api.get(`/messages/conversation/user/${userId}`);
+    // Finally, filter by search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
       
-      if (response.data && response.data._id) {
-        // Navigate to the new conversation
-        navigate(`/messages/${response.data._id}`);
+      // Search in other participant's username
+      const otherParticipant = conversation.participants.find(
+        p => p._id !== currentUser._id
+      );
+      
+      if (otherParticipant?.username.toLowerCase().includes(query)) {
+        return true;
       }
-    } catch (err) {
-      console.error('Error starting new conversation:', err);
-      setError('Failed to start new conversation');
-    } finally {
-      setIsLoading(false);
+      
+      // Search in order title
+      if (conversation.order && conversation.order.title.toLowerCase().includes(query)) {
+        return true;
+      }
+      
+      // Search in last message
+      if (conversation.lastMessage?.content?.toLowerCase().includes(query)) {
+        return true;
+      }
+      
+      return false;
     }
+    
+    return true;
+  });
+  
+  // Get the other participant in a conversation
+  const getOtherParticipant = (conversation) => {
+    return conversation.participants.find(p => p._id !== currentUser._id) || { 
+      username: 'User', 
+      profileImage: null 
+    };
   };
   
-  // Format timestamp to show either time or date
+  // Format timestamp for last message
   const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    
     const messageDate = new Date(timestamp);
     const today = new Date();
     const yesterday = new Date(today);
@@ -185,239 +131,396 @@ const Messages = () => {
       return messageDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
     }
   };
+
+  // Get conversation type badge
+  const getConversationBadge = (conversation) => {
+    if (!conversation.order) {
+      return { label: 'Direct', color: 'bg-gray-100 text-gray-700' };
+    }
+    
+    if (conversation.order) {
+      // Check if it's a gig or job order
+      if (conversation.order.gig) {
+        return { label: 'Gig', color: 'bg-blue-100 text-blue-700' };
+      } else if (conversation.order.job) {
+        return { label: 'Job', color: 'bg-purple-100 text-purple-700' };
+      } else {
+        return { label: 'Order', color: 'bg-green-100 text-green-700' };
+      }
+    }
+    
+    return { label: '', color: '' };
+  };
   
+  // Get order status badge
+  const getOrderStatusBadge = (status) => {
+    if (!status) return { color: '', text: '' };
+    
+    switch (status) {
+      case 'pending':
+        return { color: 'bg-yellow-100 text-yellow-800', text: 'Pending' };
+      case 'in_progress':
+        return { color: 'bg-blue-100 text-blue-800', text: 'In Progress' };
+      case 'under_review':
+        return { color: 'bg-purple-100 text-purple-800', text: 'Under Review' };
+      case 'completed':
+        return { color: 'bg-green-100 text-green-800', text: 'Completed' };
+      case 'cancelled':
+        return { color: 'bg-red-100 text-red-800', text: 'Cancelled' };
+      default:
+        return { color: 'bg-gray-100 text-gray-800', text: status };
+    }
+  };
+  
+  // Create a new direct conversation with a user
+  const startNewConversation = async () => {
+    const userId = prompt('Enter user ID to start conversation:');
+    if (!userId) return;
+    
+    try {
+      setIsLoading(true);
+      const response = await api.get(`/messages/conversation/user/${userId}`);
+      
+      if (response.data && response.data._id) {
+        navigate(`/messages/${response.data._id}`);
+      }
+    } catch (err) {
+      setError('Failed to start conversation. Make sure the user ID is valid.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Handle search input
   const handleSearchChange = (e) => {
     setSearchQuery(e.target.value);
   };
   
+  // Handle filter by conversation type
+  const handleFilterChange = (filterType) => {
+    setFilterByType(filterType);
+  };
+  
+  // Handle category change
+  const handleCategoryChange = (category) => {
+    setActiveCategory(category);
+  };
+  
+  // Clear search
   const clearSearch = () => {
     setSearchQuery('');
   };
   
-  const handleTabChange = (tab) => {
-    setSelectedTab(tab);
-  };
-  
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center py-12">
-        <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-        <p className="ml-2">Loading conversations...</p>
-      </div>
-    );
-  }
-  
-  if (error) {
-    return (
-      <div className="max-w-4xl mx-auto mt-20 p-8 bg-white shadow rounded-lg">
-        <div className="bg-red-100 text-red-700 p-4 rounded mb-4">
-          {error}
-        </div>
-        <button
-          onClick={() => navigate('/dashboard')}
-          className="text-blue-500 hover:underline"
-        >
-          &larr; Back to Dashboard
-        </button>
-      </div>
-    );
-  }
-  
+  // Calculate total unread messages
   const totalUnread = conversations.reduce((sum, conv) => sum + (conv.unreadCount || 0), 0);
   
   return (
-    <div className="max-w-4xl mx-auto mt-20">
-      <div className="bg-white shadow rounded-lg overflow-hidden">
-        <div className="bg-blue-500 text-white p-4">
+    <div className="container mx-auto px-4 py-8 mt-16">
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="bg-blue-500 text-white p-4 flex justify-between items-center">
           <h1 className="text-xl font-bold">Messages</h1>
+          
+          {/* Connection indicator */}
+          <div className="flex items-center">
+            <div className={`h-3 w-3 rounded-full mr-2 ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
+            <span className="text-sm">{isConnected ? 'Connected' : 'Disconnected'}</span>
+          </div>
         </div>
         
-        {/* Tabs and Search */}
-        <div className="p-4 border-b border-gray-200">
-          <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
+        {/* Filters Section */}
+        <div className="border-b border-gray-200">
+          <div className="p-4 flex flex-col gap-4">
+            {/* Search bar */}
+            <div className="relative">
+              <input
+                type="text"
+                className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Search conversations..."
+                value={searchQuery}
+                onChange={handleSearchChange}
+              />
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              {searchQuery && (
+                <button 
+                  onClick={clearSearch}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            
+            {/* Categories */}
             <div className="flex flex-wrap gap-2">
               <button
-                className={`px-3 py-1.5 rounded-full transition ${
-                  selectedTab === 'all' 
-                    ? 'bg-blue-100 text-blue-700' 
+                onClick={() => handleCategoryChange('all')}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  activeCategory === 'all' 
+                    ? 'bg-blue-500 text-white' 
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
-                onClick={() => handleTabChange('all')}
               >
                 All
               </button>
               <button
-                className={`px-3 py-1.5 rounded-full transition flex items-center ${
-                  selectedTab === 'unread' 
-                    ? 'bg-blue-100 text-blue-700' 
+                onClick={() => handleCategoryChange('unread')}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center ${
+                  activeCategory === 'unread' 
+                    ? 'bg-blue-500 text-white' 
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
-                onClick={() => handleTabChange('unread')}
               >
                 Unread
                 {totalUnread > 0 && (
-                  <span className="ml-1 bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  <span className={`ml-1.5 text-xs rounded-full ${
+                    activeCategory === 'unread' ? 'bg-white text-blue-700' : 'bg-blue-500 text-white'
+                  } w-5 h-5 flex items-center justify-center`}>
                     {totalUnread}
                   </span>
                 )}
               </button>
               <button
-                className={`px-3 py-1.5 rounded-full transition ${
-                  selectedTab === 'orders' 
-                    ? 'bg-blue-100 text-blue-700' 
+                onClick={() => handleCategoryChange('archived')}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  activeCategory === 'archived' 
+                    ? 'bg-blue-500 text-white' 
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
-                onClick={() => handleTabChange('orders')}
               >
-                Orders
+                Archived
               </button>
             </div>
             
-            <div className="relative w-full md:w-60">
-              <input
-                type="text"
-                className="w-full bg-gray-100 border border-gray-300 rounded-full pl-10 pr-10 py-2 focus:outline-none focus:border-blue-500"
-                placeholder="Search messages..."
-                value={searchQuery}
-                onChange={handleSearchChange}
-              />
-              <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            {/* Types filter */}
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => handleFilterChange('all')}
+                className={`px-3 py-1 rounded-md text-sm transition-colors ${
+                  filterByType === 'all' 
+                    ? 'bg-blue-100 text-blue-700 border border-blue-300' 
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                All Types
+              </button>
+              <button
+                onClick={() => handleFilterChange('direct')}
+                className={`px-3 py-1 rounded-md text-sm transition-colors ${
+                  filterByType === 'direct' 
+                    ? 'bg-blue-100 text-blue-700 border border-blue-300' 
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Direct
+              </button>
+              <button
+                onClick={() => handleFilterChange('orders')}
+                className={`px-3 py-1 rounded-md text-sm transition-colors ${
+                  filterByType === 'orders' 
+                    ? 'bg-blue-100 text-blue-700 border border-blue-300' 
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Orders
+              </button>
+              <button
+                onClick={() => handleFilterChange('gigs')}
+                className={`px-3 py-1 rounded-md text-sm transition-colors ${
+                  filterByType === 'gigs' 
+                    ? 'bg-blue-100 text-blue-700 border border-blue-300' 
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Gigs
+              </button>
+              <button
+                onClick={() => handleFilterChange('jobs')}
+                className={`px-3 py-1 rounded-md text-sm transition-colors ${
+                  filterByType === 'jobs' 
+                    ? 'bg-blue-100 text-blue-700 border border-blue-300' 
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                Jobs
+              </button>
+            </div>
+            
+            <div className="flex justify-end">
+              <button
+                onClick={startNewConversation}
+                className="flex items-center bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm transition-colors"
+              >
+                <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
                 </svg>
-              </div>
-              {searchQuery && (
-                <button
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                  onClick={clearSearch}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
+                New Conversation
+              </button>
             </div>
           </div>
         </div>
         
-        {filteredConversations.length === 0 ? (
+        {/* Conversation List */}
+        <div className="divide-y max-h-[calc(100vh-320px)] overflow-y-auto">
+          {isLoading ? (
             <div className="p-8 text-center">
-            {conversations.length === 0 ? (
-              <>
-                <div className="text-6xl mb-4">💬</div>
-                <p className="text-gray-500 mb-4">You don't have any messages yet.</p>
-                <p className="text-gray-500 mb-4">
-                  Start a conversation by contacting a freelancer or responding to a job request.
-                </p>
-                <Link
-                  to="/dashboard"
-                  className="text-blue-500 hover:underline"
-                >
-                  &larr; Back to Dashboard
-                </Link>
-              </>
-            ) : (
-              <>
-                <div className="text-6xl mb-4">🔍</div>
-                <p className="text-gray-500 mb-4">No conversations found matching your search criteria.</p>
-                <button
-                  onClick={clearSearch}
-                  className="text-blue-500 hover:underline"
-                >
-                  Clear search
-                </button>
-              </>
-            )}
-          </div>
-        ) : (
-          <div className="divide-y max-h-[calc(100vh-300px)] overflow-y-auto">
-            {filteredConversations.map(conversation => {
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+              <p className="mt-2 text-gray-500">Loading conversations...</p>
+            </div>
+          ) : error ? (
+            <div className="p-8 text-center">
+              <div className="text-red-500 mb-2">{error}</div>
+              <button 
+                onClick={fetchConversations}
+                className="text-blue-500 hover:underline"
+              >
+                Try again
+              </button>
+            </div>
+          ) : filteredConversations.length === 0 ? (
+            <div className="p-8 text-center">
+              {conversations.length === 0 ? (
+                <div>
+                  <div className="text-5xl mb-4">💬</div>
+                  <p className="text-gray-500 mb-4">No conversations yet</p>
+                  <p className="text-gray-500 mb-4">
+                    Start a conversation with a freelancer or client to begin messaging!
+                  </p>
+                  <button
+                    onClick={startNewConversation}
+                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md transition-colors"
+                  >
+                    Start New Conversation
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div className="text-5xl mb-4">🔍</div>
+                  <p className="text-gray-500 mb-4">No conversations match your filters</p>
+                  <div className="flex justify-center space-x-4">
+                    <button
+                      onClick={() => {
+                        setSearchQuery('');
+                        setFilterByType('all');
+                        setActiveCategory('all');
+                      }}
+                      className="text-blue-500 hover:underline"
+                    >
+                      Clear all filters
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            filteredConversations.map(conversation => {
               const otherParticipant = getOtherParticipant(conversation);
-              const hasUnread = conversation.unreadCount > 0;
+              const hasUnread = (conversation.unreadCount || 0) > 0;
+              const badge = getConversationBadge(conversation);
+              const statusBadge = conversation.order ? 
+                getOrderStatusBadge(conversation.order.status) : null;
               
               return (
                 <Link
                   key={conversation._id}
                   to={`/messages/${conversation._id}`}
-                  className={`block p-4 hover:bg-gray-50 transition ${hasUnread ? 'bg-blue-50' : ''}`}
+                  className={`block hover:bg-gray-50 transition-colors ${hasUnread ? 'bg-blue-50' : 'bg-white'}`}
                 >
-                  <div className="flex items-center">
-                    <div className="relative">
-                      <div className="h-12 w-12 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold mr-4 overflow-hidden">
-                        {otherParticipant?.profileImage ? (
-                          <img
-                            src={otherParticipant.profileImage}
-                            alt={otherParticipant.username}
-                            className="h-12 w-12 rounded-full object-cover"
-                          />
-                        ) : (
-                          otherParticipant?.username.charAt(0).toUpperCase()
+                  <div className="p-4">
+                    <div className="flex">
+                      {/* User avatar with unread indicator */}
+                      <div className="relative mr-3">
+                        <div className="h-12 w-12 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center text-gray-500">
+                          {otherParticipant.profileImage ? (
+                            <img 
+                              src={otherParticipant.profileImage} 
+                              alt={otherParticipant.username} 
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-lg font-semibold">
+                              {otherParticipant.username.charAt(0).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        {hasUnread && (
+                          <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                            {conversation.unreadCount}
+                          </div>
                         )}
                       </div>
-                      {hasUnread && (
-                        <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center border-2 border-white">
-                          {conversation.unreadCount}
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-center">
-                        <h3 className={`text-sm font-medium truncate ${hasUnread ? 'text-blue-700 font-semibold' : 'text-gray-900'}`}>
-                          {otherParticipant?.username}
-                        </h3>
-                        <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
-                          {formatTime(conversation.updatedAt)}
-                        </span>
-                      </div>
                       
-                      {conversation.order && (
-                        <div className="flex items-center mt-1">
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${
-                            conversation.order.status === 'completed' 
-                            ? 'bg-green-100 text-green-800' 
-                            : conversation.order.status === 'in_progress' 
-                            ? 'bg-blue-100 text-blue-800' 
-                            : conversation.order.status === 'pending' 
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : conversation.order.status === 'under_review'
-                            ? 'bg-purple-100 text-purple-800'  
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          Order: {conversation.order.status.replace('_', ' ')}
-                        </span>
-                        <span className="text-xs text-gray-500 ml-2 truncate">
-                          {conversation.order.title}
-                        </span>
-                      </div>
-                    )}
-                    
-                    <p className={`text-sm truncate mt-1 ${hasUnread ? 'text-gray-900' : 'text-gray-500'}`}>
-                      {conversation.lastMessage ? (
-                        <>
-                          {conversation.lastMessage.sender._id === currentUser._id && "You: "}
-                          {conversation.lastMessage.content ? (
-                            conversation.lastMessage.content
+                      {/* Conversation details */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className={`font-medium truncate ${hasUnread ? 'font-semibold' : ''}`}>
+                              {otherParticipant.username}
+                            </h3>
+                            
+                            {/* Badges for conversation type and status */}
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${badge.color}`}>
+                                {badge.label}
+                              </span>
+                              
+                              {statusBadge && (
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${statusBadge.color}`}>
+                                  {statusBadge.text}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Timestamp */}
+                          <span className="text-xs text-gray-500">
+                            {formatTime(conversation.updatedAt)}
+                          </span>
+                        </div>
+                        
+                        {/* Order title if exists */}
+                        {conversation.order && (
+                          <p className="text-sm text-gray-600 truncate mt-1">
+                            {conversation.order.title}
+                          </p>
+                        )}
+                        
+                        {/* Last message preview */}
+                        <p className={`text-sm truncate mt-1 ${hasUnread ? 'font-medium text-gray-900' : 'text-gray-500'}`}>
+                          {conversation.lastMessage ? (
+                            conversation.lastMessage.sender === currentUser._id ? (
+                              <span className="text-gray-400">You: </span>
+                            ) : null
+                          ) : null}
+                          
+                          {conversation.lastMessage ? (
+                            conversation.lastMessage.content || (
+                              conversation.lastMessage.attachments?.length ? (
+                                `[${conversation.lastMessage.attachments.length} attachment${
+                                  conversation.lastMessage.attachments.length !== 1 ? 's' : ''
+                                }]`
+                              ) : 'Empty message'
+                            )
                           ) : (
-                            conversation.lastMessage.attachments?.length ? (
-                              `${conversation.lastMessage.attachments.length} attachment${conversation.lastMessage.attachments.length !== 1 ? 's' : ''}`
-                            ) : 'Empty message'
+                            <span className="italic">No messages yet</span>
                           )}
-                        </>
-                      ) : (
-                        'No messages yet'
-                      )}
-                    </p>
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </Link>
-            );
-          })}
+                </Link>
+              );
+            })
+          )}
         </div>
-      )}
+      </div>
     </div>
-  </div>
-);
+  );
 };
 
 export default Messages;

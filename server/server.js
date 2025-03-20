@@ -5,6 +5,8 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
+const http = require('http');
+const { setupWebSocketServer } = require('./websocket');
 
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
@@ -66,7 +68,17 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Create HTTP server
+const server = http.createServer(app);
+
+// Setup WebSocket server
+setupWebSocketServer(server);
+
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+const WS_PORT = process.env.WS_PORT || 5001;
+
+// Start the server
+server.listen(PORT, () => {
+  console.log(`HTTP Server running on port ${PORT}`);
+  console.log(`WebSocket Server running on port ${WS_PORT}`);
 });

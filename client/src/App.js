@@ -2,6 +2,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { WebSocketProvider } from './utils/websocketService';
 import { AuthContext } from './context/AuthContext';
 
 // Layout Components
@@ -111,117 +112,119 @@ const FreelancerRoleCheck = ({ children }) => {
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <div className="min-h-screen flex flex-col">
-          <Navbar />
-          <main className="flex-grow">
-            <Routes>
-              {/* Public Routes */}
-              <Route path="/" element={<Home />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              
-              {/* Gigs Routes */}
-              <Route path="/gigs" element={<GigsList />} />
-              <Route path="/gigs/:id" element={<GigDetails />} />
-              
-              {/* Jobs Routes */}
-              <Route path="/jobs" element={<JobsList />} />
-              <Route path="/jobs/:id" element={<JobDetails />} />
-              
-              {/* Freelancer Routes */}
-              {/* <Route path="/find-freelancers" element={<FindFreelancers />} />
-              <Route path="/freelancers/:id" element={<FreelancerProfile />} /> */}
-              
-              {/* Private Routes (require login) */}
-              <Route path="/dashboard" element={
-                <PrivateRoute>
-                  <Dashboard />
-                </PrivateRoute>
-              } />
-              
-              <Route path="/profile" element={
-                <PrivateRoute>
-                  <Profile />
-                </PrivateRoute>
-              } />
-              
-              <Route path="/messages" element={
-                <PrivateRoute>
-                  <Messages />
-                </PrivateRoute>
-              } />
-              
-              <Route path="/messages/:id" element={
-                <PrivateRoute>
-                  <Conversation />
-                </PrivateRoute>
-              } />
-              
-              <Route path="/wallet" element={
-                <PrivateRoute>
-                  <Wallet />
-                </PrivateRoute>
-              } />
-              
-              <Route path="/orders/:id" element={
-                <PrivateRoute>
-                  <OrderDetails />
-                </PrivateRoute>
-              } />
-              
-              {/* Client-only Routes */}
-              <Route path="/create-job" element={
-                <ClientRoute>
-                  <CreateJob />
-                </ClientRoute>
-              } />
-              
-              <Route path="/jobs/:id/edit" element={
-                <ClientRoute>
-                  <EditJob />
-                </ClientRoute>
-              } />
-              
-              <Route path="/jobs/my-jobs" element={
-                <ClientRoute>
-                  <JobsList isMyJobs={true} />
-                </ClientRoute>
-              } />
-              
-              {/* Freelancer-only Routes */}
-              <Route path="/create-gig" element={
-                <FreelancerRoute>
-                  <CreateGig />
-                </FreelancerRoute>
-              } />
-              
-              <Route path="/gigs/:id/edit" element={
-                <FreelancerRoute>
-                  <EditGig />
-                </FreelancerRoute>
-              } />
-              
-              <Route path="/gigs/my-gigs" element={
-                <FreelancerRoute>
-                  <GigsList isMyGigs={true} />
-                </FreelancerRoute>
-              } />
-              
-              {/* <Route path="/portfolio" element={
-                <FreelancerRoute>
-                  <Portfolio />
-                </FreelancerRoute>
-              } /> */}
-              
-              {/* 404 and Redirects */}
-              <Route path="/404" element={<NotFound />} />
-              <Route path="*" element={<Navigate to="/404" replace />} />
-            </Routes>
-          </main>
-          <Footer />
-        </div>
-      </Router>
+      <WebSocketProvider>
+        <Router>
+          <div className="min-h-screen flex flex-col">
+            <Navbar />
+            <main className="flex-grow">
+              <Routes>
+                {/* Public Routes */}
+                <Route path="/" element={<Home />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                
+                {/* Gigs Routes */}
+                <Route path="/gigs" element={<GigsList />} />
+                <Route path="/gigs/:id" element={<GigDetails />} />
+                
+                {/* Jobs Routes */}
+                <Route path="/jobs" element={<JobsList />} />
+                <Route path="/jobs/:id" element={<JobDetails />} />
+                
+                {/* Freelancer Routes */}
+                {/* <Route path="/find-freelancers" element={<FindFreelancers />} />
+                <Route path="/freelancers/:id" element={<FreelancerProfile />} /> */}
+                
+                {/* Private Routes (require login) */}
+                <Route path="/dashboard" element={
+                  <PrivateRoute>
+                    <Dashboard />
+                  </PrivateRoute>
+                } />
+                
+                <Route path="/profile" element={
+                  <PrivateRoute>
+                    <Profile />
+                  </PrivateRoute>
+                } />
+                
+                <Route path="/messages" element={
+                  <PrivateRoute>
+                    <Messages />
+                  </PrivateRoute>
+                } />
+                
+                <Route path="/messages/:id" element={
+                  <PrivateRoute>
+                    <Conversation />
+                  </PrivateRoute>
+                } />
+                
+                <Route path="/wallet" element={
+                  <PrivateRoute>
+                    <Wallet />
+                  </PrivateRoute>
+                } />
+                
+                <Route path="/orders/:id" element={
+                  <PrivateRoute>
+                    <OrderDetails />
+                  </PrivateRoute>
+                } />
+                
+                {/* Client-only Routes */}
+                <Route path="/create-job" element={
+                  <ClientRoute>
+                    <CreateJob />
+                  </ClientRoute>
+                } />
+                
+                <Route path="/jobs/:id/edit" element={
+                  <ClientRoute>
+                    <EditJob />
+                  </ClientRoute>
+                } />
+                
+                <Route path="/jobs/my-jobs" element={
+                  <ClientRoute>
+                    <JobsList isMyJobs={true} />
+                  </ClientRoute>
+                } />
+                
+                {/* Freelancer-only Routes */}
+                <Route path="/create-gig" element={
+                  <FreelancerRoute>
+                    <CreateGig />
+                  </FreelancerRoute>
+                } />
+                
+                <Route path="/gigs/:id/edit" element={
+                  <FreelancerRoute>
+                    <EditGig />
+                  </FreelancerRoute>
+                } />
+                
+                <Route path="/gigs/my-gigs" element={
+                  <FreelancerRoute>
+                    <GigsList isMyGigs={true} />
+                  </FreelancerRoute>
+                } />
+                
+                {/* <Route path="/portfolio" element={
+                  <FreelancerRoute>
+                    <Portfolio />
+                  </FreelancerRoute>
+                } /> */}
+                
+                {/* 404 and Redirects */}
+                <Route path="/404" element={<NotFound />} />
+                <Route path="*" element={<Navigate to="/404" replace />} />
+              </Routes>
+            </main>
+            <Footer />
+          </div>
+        </Router>
+      </WebSocketProvider>
     </AuthProvider>
   );
 }
