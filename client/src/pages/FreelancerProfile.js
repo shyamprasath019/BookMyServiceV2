@@ -3,6 +3,8 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import api from '../utils/api';
+import ReviewStats from '../components/ReviewStats';
+import ReviewItem from '../components/ReviewItem';
 
 const FreelancerProfile = () => {
   const { id } = useParams();
@@ -394,48 +396,51 @@ const FreelancerProfile = () => {
               
               {/* Reviews Tab */}
               {activeTab === 'reviews' && (
-                <div>
-                  <h2 className="text-xl font-bold mb-4">Client Reviews</h2>
-                  
-                  {reviews.length > 0 ? (
-                    <div className="space-y-4">
-                      {reviews.map((review, index) => (
-                        <div key={index} className="border-b pb-4 last:border-b-0 last:pb-0">
-                          <div className="flex justify-between items-start mb-2">
-                            <div className="flex items-center">
-                              <div className="h-10 w-10 rounded-full bg-gray-200 mr-3 flex items-center justify-center overflow-hidden">
-                                {review.client?.profileImage ? (
-                                  <img 
-                                    src={review.client.profileImage} 
-                                    alt={review.client.username}
-                                    className="h-full w-full object-cover"
-                                  />
-                                ) : (
-                                  <span className="text-lg font-bold text-gray-400">
-                                    {review.client?.username?.charAt(0).toUpperCase() || 'C'}
-                                  </span>
-                                )}
-                              </div>
-                              <div>
-                                <p className="font-semibold">{review.client?.username || 'Client'}</p>
-                                <p className="text-sm text-gray-500">
-                                  {new Date(review.createdAt).toLocaleDateString()}
-                                </p>
-                              </div>
-                            </div>
-                            {renderRating(review.rating)}
-                          </div>
-                          <p className="text-gray-700">{review.comment}</p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-gray-500">
-                      This freelancer has not received any reviews yet.
-                    </p>
-                  )}
-                </div>
-              )}
+  <div>
+    <div className="flex justify-between items-center mb-4">
+      <h2 className="text-xl font-bold">Client Reviews</h2>
+      <Link to={`/freelancers/${freelancer._id}/reviews`} className="text-blue-500 hover:underline">
+        View All Reviews
+      </Link>
+    </div>
+    
+    <div className="mb-6">
+      <ReviewStats 
+        userId={freelancer._id}
+        avgRating={freelancer.avgRating}
+        totalReviews={freelancer.totalReviews}
+        showDistribution={true}
+      />
+    </div>
+    
+    <div className="border-t pt-4">
+      {reviews.length > 0 ? (
+        <div className="space-y-6">
+          {reviews.slice(0, 3).map((review, index) => (
+            <ReviewItem key={review._id || index} review={review} showOrder={true} />
+          ))}
+          
+          {reviews.length > 3 && (
+            <div className="text-center mt-4">
+              <Link
+                to={`/freelancers/${freelancer._id}/reviews`}
+                className="text-blue-500 hover:underline"
+              >
+                View All {reviews.length} Reviews
+              </Link>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="text-center py-6">
+          <p className="text-gray-500">
+            This freelancer has not received any reviews yet.
+          </p>
+        </div>
+      )}
+    </div>
+  </div>
+)}
             </div>
           </div>
         </div>

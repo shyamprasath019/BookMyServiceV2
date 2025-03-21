@@ -7,9 +7,6 @@ import ThreadList from '../components/ThreadList';
 
 const ConversationHeader = ({ conversation, otherParticipant, isLoading }) => {
   const navigate = useNavigate();
-  const [threadId, setThreadId] = useState(null);
-  const [threads, setThreads] = useState([]);
-  const [isLoadingThreads, setIsLoadingThreads] = useState(true);
   
   if (isLoading || !conversation) {
     return (
@@ -277,7 +274,7 @@ const Message = ({ message, isCurrentUser, showDate, previousMessage }) => {
 const Conversation = () => {
   const { id } = useParams();
   const { currentUser } = useContext(AuthContext);
-  const { isConnected, joinConversation, leaveConversation } = useWebSocketContext();
+  const { isConnected, lastMessage, joinConversation, leaveConversation, joinThread, leaveThread } = useWebSocketContext();
   const navigate = useNavigate();
   
   const [conversation, setConversation] = useState(null);
@@ -286,6 +283,10 @@ const Conversation = () => {
   const [isLoadingMessages, setIsLoadingMessages] = useState(true);
   const [error, setError] = useState('');
   
+  const [threadId, setThreadId] = useState(null);
+  const [threads, setThreads] = useState([]);
+  const [isLoadingThreads, setIsLoadingThreads] = useState(true);
+
   // Message input state
   const [messageText, setMessageText] = useState('');
   const [attachments, setAttachments] = useState([]);
@@ -329,12 +330,44 @@ const Conversation = () => {
       leaveConversation(id);
     };
   }, [id, joinConversation, leaveConversation]);
-  
+
   useEffect(() => {
     if (conversation && conversation._id) {
       fetchThreads();
     }
   }, [conversation]);
+  
+  // Fetch messages when threadId changes
+  useEffect(() => {
+    if (threadId) {
+      setPage(1); // Reset to first page when changing threads
+      fetchMessages();
+    }
+  }, [threadId]);
+  
+  // Handle thread selection from URL
+  useEffect(() => {
+    // Check if thread ID is in URL params
+    const params = new URLSearchParams(window.location.search);
+    const threadIdFromUrl = params.get('thread');
+    
+    if (threadIdFromUrl && threads.some(t => t._id === threadIdFromUrl)) {
+      setThreadId(threadIdFromUrl);
+    }
+  }, [threads]);
+  
+  // Join/leave thread via WebSocket
+  useEffect(() => {
+    if (conversation && conversation._id && threadId) {
+      // Join the thread via WebSocket
+      joinThread(conversation._id, threadId);
+      
+      // Cleanup - leave thread on unmount or when threadId changes
+      return () => {
+        leaveThread(conversation._id, threadId);
+      };
+    }
+  }, [conversation, threadId, joinThread, leaveThread]);
   
   // Handle new messages from WebSocket
   useEffect(() => {
@@ -395,7 +428,11 @@ const Conversation = () => {
       setPage(prev => prev + 1);
     }
   };
-  
+  const handleThreadSelect = (id) => {
+    setThreadId(id);
+    setPage(1); // Reset to first page when changing threads
+    setMessages([]); // Clear messages when changing threads
+  };
   // Handle message input change
   const handleMessageChange = (e) => {
     setMessageText(e.target.value);
@@ -522,12 +559,6 @@ const Conversation = () => {
     } finally {
       setIsSending(false);
     }
-  };
-
-  const handleThreadSelect = (id) => {
-    setThreadId(id);
-    setPage(1); // Reset to first page when changing threads
-    setMessages([]); // Clear messages when changing threads
   };
   
   // Handle open file picker

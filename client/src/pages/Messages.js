@@ -22,6 +22,12 @@ const Messages = () => {
     fetchConversations();
   }, []);
   
+  useEffect(() => {
+    if (conversations.length > 0) {
+      fetchThreadsForConversations();
+    }
+  }, [conversations]);
+
   // Refetch when new message received through WebSocket
   useEffect(() => {
     if (lastMessage && lastMessage.type === 'new_message') {
@@ -29,7 +35,7 @@ const Messages = () => {
       fetchConversations();
     }
   }, [lastMessage]);
-  
+
   const fetchConversations = async () => {
     setIsLoading(true);
     try {
@@ -50,6 +56,32 @@ const Messages = () => {
       setIsLoading(false);
     }
   };
+
+  const fetchThreadsForConversations = async () => {
+    if (!conversations || conversations.length === 0) return;
+    
+    try {
+      const threadPromises = conversations.map(conversation => 
+        api.get(`/messages/conversation/${conversation._id}/threads`)
+      );
+      
+      const responses = await Promise.all(threadPromises);
+      
+      // Create a mapping of conversation IDs to threads
+      const conversationThreads = {};
+      responses.forEach((response, index) => {
+        if (response && response.data) {
+          conversationThreads[conversations[index]._id] = response.data;
+        }
+      });
+      
+      setThreads(conversationThreads);
+    } catch (err) {
+      console.error('Error fetching threads for conversations:', err);
+    }
+  };
+
+
   
   // Filter conversations based on search and type filters
   const filteredConversations = conversations.filter(conversation => {
@@ -439,7 +471,7 @@ const Messages = () => {
                 getOrderStatusBadge(conversation.order.status) : null;
               
               // Get threads for this conversation if available
-              const conversationThreads = threads.filter(t => t.conversation === conversation._id);
+              const conversationThreads = threads[conversation._id] || [];
               const hasMultipleThreads = conversationThreads.length > 1;
               
               return (
@@ -449,8 +481,67 @@ const Messages = () => {
                     className={`block hover:bg-gray-50 transition-colors ${hasUnread ? 'bg-blue-50' : 'bg-white'}`}
                   >
                     <div className="p-4">
-                      {/* Rest of conversation rendering */}
-                      {/* ... */}
+                      <div className="flex justify-between items-start">
+                        <div className="flex">
+                          <div className="h-10 w-10 rounded-full bg-gray-300 mr-3 flex items-center justify-center overflow-hidden">
+                            {otherParticipant.profileImage ? (
+                              <img
+                                src={otherParticipant.profileImage}
+                                alt={otherParticipant.username}
+                                className="h-10 w-10 rounded-full object-cover"
+                              />
+                            ) : (
+                              <span className="font-semibold text-gray-600">
+                                {otherParticipant.username.charAt(0).toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex-grow">
+                            <div className="flex items-center justify-between">
+                              <div className="font-medium text-gray-900">
+                                {otherParticipant.username}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {formatTime(conversation.updatedAt)}
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center mt-1">
+                              {badge.label && (
+                                <span className={`text-xs px-2 py-0.5 rounded-full mr-2 ${badge.color}`}>
+                                  {badge.label}
+                                </span>
+                              )}
+                              
+                              {statusBadge && (
+                                <span className={`text-xs px-2 py-0.5 rounded-full mr-2 ${statusBadge.color}`}>
+                                  {statusBadge.text}
+                                </span>
+                              )}
+                            </div>
+                            
+                            {conversation.lastMessage && (
+                              <div className="text-sm text-gray-600 mt-1 line-clamp-1">
+                                {conversation.lastMessage.content}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {hasUnread && (
+                          <div className="flex-shrink-0 ml-2">
+                            <span className="bg-blue-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
+                              {conversation.unreadCount}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {conversation.order && (
+                        <div className="mt-2 text-sm text-gray-700 line-clamp-1">
+                          <span className="font-medium">Order:</span> {conversation.order.title}
+                        </div>
+                      )}
                       
                       {/* Add thread indicators if multiple threads exist */}
                       {hasMultipleThreads && (

@@ -4,6 +4,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import api from '../utils/api';
 import PaymentForm from '../components/PaymentForm';
+import EnhancedReviewForm from '../components/EnhancedReviewForm';
 
 const OrderDetails = () => {
   const { id } = useParams();
@@ -23,8 +24,14 @@ const OrderDetails = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deliveryError, setDeliveryError] = useState('');
   const [deliverySuccess, setDeliverySuccess] = useState('');
+
+  const [isSubmittingClientReview, setIsSubmittingClientReview] = useState(false);
+const [isSubmittingFreelancerReview, setIsSubmittingFreelancerReview] = useState(false);
+const [isEditingClientReview, setIsEditingClientReview] = useState(false);
+const [isEditingFreelancerReview, setIsEditingFreelancerReview] = useState(false);
+const [editingReview, setEditingReview] = useState(null);
   
-  // Review form
+// Review form
   const [reviewForm, setReviewForm] = useState({
     rating: 5,
     comment: ''
@@ -33,9 +40,11 @@ const OrderDetails = () => {
   const [reviewError, setReviewError] = useState('');
   const [reviewSuccess, setReviewSuccess] = useState('');
   
+  // Conversation state - moved outside of useEffect
   const [orderConversation, setOrderConversation] = useState(null);
   const [conversationLoading, setConversationLoading] = useState(false);
-  
+  const [isContactLoading, setIsContactLoading] = useState(false);
+
   useEffect(() => {
     fetchOrderDetails();
   }, [id]);
@@ -52,6 +61,13 @@ const OrderDetails = () => {
       setIsLoading(false);
     }
   };
+
+  // Separate useEffect for fetching conversation
+  useEffect(() => {
+    if (order && order._id) {
+      getOrderConversation();
+    }
+  }, [order]);
   
   const handleDeliveryFormChange = (e) => {
     const { name, value } = e.target;
@@ -183,6 +199,40 @@ const OrderDetails = () => {
       setError(err.response?.data?.message || 'Failed to release payment');
     }
   };
+
+  // Helper function moved outside of the useEffect to prevent hooks ordering issues
+  const getOrderConversation = async () => {
+    setConversationLoading(true);
+    try {
+      // Check if the order object exists and has an _id
+      if (!order || !order._id) {
+        throw new Error('Invalid order data');
+      }
+      
+      // First try to get an existing order conversation
+      try {
+        const convResponse = await api.get(`/messages/conversation/order/${order._id}`);
+        setOrderConversation({
+          _id: convResponse.data._id,
+          threadId: convResponse.data._id  // Initially use the conversation ID as thread ID
+        });
+      } catch (error) {
+        // If not found, create a new thread for this order
+        const threadResponse = await api.post(`/orders/${order._id}/thread`);
+        
+        // Set both the conversation and thread ID
+        setOrderConversation({
+          _id: threadResponse.data.conversation, 
+          threadId: threadResponse.data._id
+        });
+      }
+    } catch (err) {
+      console.error('Error getting order conversation:', err);
+      setError('Failed to get conversation for this order');
+    } finally {
+      setConversationLoading(false);
+    }
+  };
   
   if (isLoading) {
     return (
@@ -205,33 +255,6 @@ const OrderDetails = () => {
       </div>
     );
   }
-
-  // Add this function to get or create a conversation for the order
-  const getOrderConversation = async () => {
-    setConversationLoading(true);
-    try {
-      // First create a thread for this order
-      const threadResponse = await api.post(`/orders/${order._id}/thread`);
-      
-      // Set both the conversation and thread ID
-      setOrderConversation({
-        _id: threadResponse.data.conversation, 
-        threadId: threadResponse.data._id
-      });
-    } catch (err) {
-      console.error('Error getting order conversation:', err);
-      setError('Failed to get conversation for this order');
-    } finally {
-      setConversationLoading(false);
-    }
-  };
-
-  // Add this useEffect to load the conversation when the order data is available
-  useEffect(() => {
-    if (order && order._id) {
-      getOrderConversation();
-    }
-  }, [order]);
   
   // Determine user role in this order
   const isClient = activeRole === 'client';
@@ -377,156 +400,156 @@ const OrderDetails = () => {
       
       {/* Order Actions */}
       <div className="bg-white rounded-lg shadow overflow-hidden mb-8">
-  <div className="p-6">
-    <h2 className="text-xl font-bold mb-4">Order Actions</h2>
-    
-    {/* Client Actions */}
-    {isClient && (
-      <div className="space-y-4">
-        {/* Payment Section - Only show when payment is pending */}
-        {order.paymentStatus === 'pending' && (
-          <div>
-            {showPaymentForm ? (
-              <PaymentForm order={order} onPaymentComplete={handlePaymentComplete} />
-            ) : (
-              <div>
-                <div className="bg-yellow-50 border border-yellow-200 p-4 rounded mb-4">
-                  <p className="text-yellow-800">
-                    Payment is required to start this order. Your payment will be held in escrow until the order is completed.
-                  </p>
+        <div className="p-6">
+          <h2 className="text-xl font-bold mb-4">Order Actions</h2>
+          
+          {/* Client Actions */}
+          {isClient && (
+            <div className="space-y-4">
+              {/* Payment Section - Only show when payment is pending */}
+              {order.paymentStatus === 'pending' && (
+                <div>
+                  {showPaymentForm ? (
+                    <PaymentForm order={order} onPaymentComplete={handlePaymentComplete} />
+                  ) : (
+                    <div>
+                      <div className="bg-yellow-50 border border-yellow-200 p-4 rounded mb-4">
+                        <p className="text-yellow-800">
+                          Payment is required to start this order. Your payment will be held in escrow until the order is completed.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setShowPaymentForm(true)}
+                        className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"
+                      >
+                        Pay Now (BMS {order.price.toFixed(2)})
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <button
-                  onClick={() => setShowPaymentForm(true)}
-                  className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"
-                >
-                  Pay Now (BMS {order.price.toFixed(2)})
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-        
-        {/* Review Work Section - Only when work is delivered and payment is in escrow */}
-        {order.status === 'under_review' && order.paymentStatus === 'in_escrow' && (
-          <div>
-            <div className="bg-blue-50 border border-blue-200 p-4 rounded mb-4">
-              <p className="text-blue-800">
-                The freelancer has delivered the work. Please review it and either accept or request revisions.
-              </p>
-            </div>
-            <div className="flex space-x-4">
-              <button
-                onClick={handleReleasePayment}
-                className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"
-              >
-                Accept & Release Payment
-              </button>
-              <button
-                onClick={() => handleStatusChange('in_progress')}
-                className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded"
-              >
-                Request Revisions
-              </button>
-            </div>
-          </div>
-        )}
-        
-        {/* Cancel Order - Only when order is active and payment is in escrow */}
-        {['pending', 'in_progress'].includes(order.status) && order.paymentStatus === 'in_escrow' && (
-          <div className="mt-6">
-            <button
-              onClick={handleCancelOrder}
-              className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded"
-            >
-              Cancel Order & Request Refund
-            </button>
-          </div>
-        )}
-      </div>
-    )}
-    
-    {/* Freelancer Actions */}
-    {isFreelancer && (
-      <div className="space-y-4">
-        {/* Accept Order - Only when order is pending and payment is in escrow */}
-        {order.status === 'pending' && order.paymentStatus === 'in_escrow' && (
-          <div>
-            <div className="bg-blue-50 border border-blue-200 p-4 rounded mb-4">
-              <p className="text-blue-800">
-                New order received with payment in escrow! Accept it to start working.
-              </p>
-            </div>
-            <button
-              onClick={() => handleStatusChange('in_progress')}
-              className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
-            >
-              Accept Order
-            </button>
-          </div>
-        )}
-        
-        {/* Deliver Work - Only when order is in progress */}
-        {order.status === 'in_progress' && order.paymentStatus === 'in_escrow' && (
-          <div>
-            {deliveryError && (
-              <div className="bg-red-100 text-red-700 p-4 rounded mb-4">
-                {deliveryError}
-              </div>
-            )}
-            {deliverySuccess && (
-              <div className="bg-green-100 text-green-700 p-4 rounded mb-4">
-                {deliverySuccess}
-              </div>
-            )}
-            
-            <form onSubmit={handleDeliverySubmit}>
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="description">
-                  Delivery Message
-                </label>
-                <textarea
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-                  id="description"
-                  name="description"
-                  rows="4"
-                  value={deliveryForm.description}
-                  onChange={handleDeliveryFormChange}
-                  placeholder="Describe what you're delivering..."
-                  required
-                ></textarea>
-              </div>
+              )}
               
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="attachments">
-                  Attachments
-                </label>
-                <input
-                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-                  type="file"
-                  id="attachments"
-                  name="attachments"
-                  onChange={handleFileChange}
-                  multiple
-                />
-                <p className="mt-1 text-sm text-gray-500">
-                  Upload files related to your delivery.
-                </p>
-              </div>
+              {/* Review Work Section - Only when work is delivered and payment is in escrow */}
+              {order.status === 'under_review' && order.paymentStatus === 'in_escrow' && (
+                <div>
+                  <div className="bg-blue-50 border border-blue-200 p-4 rounded mb-4">
+                    <p className="text-blue-800">
+                      The freelancer has delivered the work. Please review it and either accept or request revisions.
+                    </p>
+                  </div>
+                  <div className="flex space-x-4">
+                    <button
+                      onClick={handleReleasePayment}
+                      className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"
+                    >
+                      Accept & Release Payment
+                    </button>
+                    <button
+                      onClick={() => handleStatusChange('in_progress')}
+                      className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded"
+                    >
+                      Request Revisions
+                    </button>
+                  </div>
+                </div>
+              )}
               
-              <button
-                type="submit"
-                className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? 'Submitting...' : 'Deliver Work'}
-              </button>
-            </form>
-          </div>
-        )}
+              {/* Cancel Order - Only when order is active and payment is in escrow */}
+              {['pending', 'in_progress'].includes(order.status) && order.paymentStatus === 'in_escrow' && (
+                <div className="mt-6">
+                  <button
+                    onClick={handleCancelOrder}
+                    className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded"
+                  >
+                    Cancel Order & Request Refund
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Freelancer Actions */}
+          {isFreelancer && (
+            <div className="space-y-4">
+              {/* Accept Order - Only when order is pending and payment is in escrow */}
+              {order.status === 'pending' && order.paymentStatus === 'in_escrow' && (
+                <div>
+                  <div className="bg-blue-50 border border-blue-200 p-4 rounded mb-4">
+                    <p className="text-blue-800">
+                      New order received with payment in escrow! Accept it to start working.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleStatusChange('in_progress')}
+                    className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+                  >
+                    Accept Order
+                  </button>
+                </div>
+              )}
+              
+              {/* Deliver Work - Only when order is in progress */}
+              {order.status === 'in_progress' && order.paymentStatus === 'in_escrow' && (
+                <div>
+                  {deliveryError && (
+                    <div className="bg-red-100 text-red-700 p-4 rounded mb-4">
+                      {deliveryError}
+                    </div>
+                  )}
+                  {deliverySuccess && (
+                    <div className="bg-green-100 text-green-700 p-4 rounded mb-4">
+                      {deliverySuccess}
+                    </div>
+                  )}
+                  
+                  <form onSubmit={handleDeliverySubmit}>
+                    <div className="mb-4">
+                      <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="description">
+                        Delivery Message
+                      </label>
+                      <textarea
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                        id="description"
+                        name="description"
+                        rows="4"
+                        value={deliveryForm.description}
+                        onChange={handleDeliveryFormChange}
+                        placeholder="Describe what you're delivering..."
+                        required
+                      ></textarea>
+                    </div>
+                    
+                    <div className="mb-4">
+                      <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="attachments">
+                        Attachments
+                      </label>
+                      <input
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+                        type="file"
+                        id="attachments"
+                        name="attachments"
+                        onChange={handleFileChange}
+                        multiple
+                      />
+                      <p className="mt-1 text-sm text-gray-500">
+                        Upload files related to your delivery.
+                      </p>
+                    </div>
+                    
+                    <button
+                      type="submit"
+                      className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded"
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? 'Submitting...' : 'Deliver Work'}
+                    </button>
+                  </form>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
-    )}
-  </div>
-</div>
       
       {/* Delivered Work */}
       {order.deliveredWork && order.deliveredWork.length > 0 && (
@@ -563,205 +586,155 @@ const OrderDetails = () => {
       )}
       
       {/* Reviews Section */}
-      {order.status === 'completed' && (
-        <div className="bg-white rounded-lg shadow overflow-hidden mb-8">
-          <div className="p-6">
-            <h2 className="text-xl font-bold mb-4">Reviews</h2>
-            
-            {/* Client's Review */}
-            <div className="mb-6">
-              <h3 className="font-semibold mb-3">Client's Review</h3>
-              {order.reviewByClient ? (
-                <div className="bg-gray-50 p-4 rounded">
-                  <div className="flex items-center mb-2">
-                    <div className="flex mr-2">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <svg 
-                          key={star} 
-                          className={`h-5 w-5 ${
-                            star <= order.reviewByClient.rating ? 'text-yellow-400' : 'text-gray-300'
-                          }`} 
-                          fill="currentColor" 
-                          viewBox="0 0 20 20"
-                        >
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                        </svg>
-                      ))}
-                    </div>
-                    <span className="text-gray-600">
-                      {new Date(order.reviewByClient.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <p className="text-gray-700">{order.reviewByClient.comment}</p>
-                </div>
-              ) : isClient && !hasReviewed ? (
-                <div>
-                  {reviewError && (
-                    <div className="bg-red-100 text-red-700 p-4 rounded mb-4">
-                      {reviewError}
-                    </div>
-                  )}
-                  {reviewSuccess && (
-                    <div className="bg-green-100 text-green-700 p-4 rounded mb-4">
-                      {reviewSuccess}
-                    </div>
-                  )}
-                  
-                  <form onSubmit={handleReviewSubmit}>
-                    <div className="mb-4">
-                      <label className="block text-gray-700 text-sm font-bold mb-2">
-                        Rating
-                      </label>
-                      <div className="flex">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <button
-                            key={star}
-                            type="button"
-                            onClick={() => setReviewForm(prev => ({ ...prev, rating: star }))}
-                            className="h-8 w-8 text-yellow-400 focus:outline-none"
-                          >
-                            <svg 
-                              className={`h-7 w-7 ${
-                                star <= reviewForm.rating ? 'text-yellow-400' : 'text-gray-300'
-                              }`} 
-                              fill="currentColor" 
-                              viewBox="0 0 20 20"
-                            >
-                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                            </svg>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    <div className="mb-4">
-                      <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="comment">
-                        Review Comment
-                      </label>
-                      <textarea
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-                        id="comment"
-                        name="comment"
-                        rows="3"
-                        value={reviewForm.comment}
-                        onChange={handleReviewFormChange}
-                        placeholder="Share your experience working with this freelancer..."
-                        required
-                      ></textarea>
-                    </div>
-                    
-                    <button
-                      type="submit"
-                      className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
-                      disabled={isSubmittingReview}
-                    >
-                      {isSubmittingReview ? 'Submitting...' : 'Submit Review'}
-                    </button>
-                  </form>
-                </div>
-              ) : (
-                <p className="text-gray-500 italic">No review submitted yet.</p>
-              )}
+{order.status === 'completed' && (
+  <div className="bg-white rounded-lg shadow overflow-hidden mb-8">
+    <div className="p-6">
+      <h2 className="text-xl font-bold mb-4">Reviews</h2>
+      
+      {/* Client's Review */}
+      <div className="mb-6">
+        <h3 className="font-semibold mb-3">Client's Review</h3>
+        {order.reviewByClient ? (
+          <div className="bg-gray-50 p-4 rounded">
+            <div className="flex items-center mb-2">
+              <div className="flex mr-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <svg 
+                    key={star} 
+                    className={`h-5 w-5 ${
+                      star <= order.reviewByClient.rating ? 'text-yellow-400' : 'text-gray-300'
+                    }`} 
+                    fill="currentColor" 
+                    viewBox="0 0 20 20"
+                  >
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                  </svg>
+                ))}
+              </div>
+              <span className="text-gray-600">
+                {new Date(order.reviewByClient.createdAt).toLocaleDateString()}
+              </span>
             </div>
+            {order.reviewByClient.title && (
+              <h4 className="font-bold mb-2">{order.reviewByClient.title}</h4>
+            )}
+            <p className="text-gray-700">{order.reviewByClient.comment}</p>
             
-            {/* Freelancer's Review */}
-            <div>
-              <h3 className="font-semibold mb-3">Freelancer's Review</h3>
-              {order.reviewByFreelancer ? (
-                <div className="bg-gray-50 p-4 rounded">
-                  <div className="flex items-center mb-2">
-                    <div className="flex mr-2">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <svg 
-                          key={star} 
-                          className={`h-5 w-5 ${
-                            star <= order.reviewByFreelancer.rating ? 'text-yellow-400' : 'text-gray-300'
-                          }`} 
-                          fill="currentColor" 
-                          viewBox="0 0 20 20"
-                        >
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                        </svg>
-                      ))}
-                    </div>
-                    <span className="text-gray-600">
-                      {new Date(order.reviewByFreelancer.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <p className="text-gray-700">{order.reviewByFreelancer.comment}</p>
-                </div>
-              ) : isFreelancer && !hasReviewed ? (
-                <div>
-                  {reviewError && (
-                    <div className="bg-red-100 text-red-700 p-4 rounded mb-4">
-                      {reviewError}
-                    </div>
-                  )}
-                  {reviewSuccess && (
-                    <div className="bg-green-100 text-green-700 p-4 rounded mb-4">
-                      {reviewSuccess}
-                    </div>
-                  )}
-                  
-                  <form onSubmit={handleReviewSubmit}>
-                    <div className="mb-4">
-                      <label className="block text-gray-700 text-sm font-bold mb-2">
-                        Rating
-                      </label>
-                      <div className="flex">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <button
-                            key={star}
-                            type="button"
-                            onClick={() => setReviewForm(prev => ({ ...prev, rating: star }))}
-                            className="h-8 w-8 text-yellow-400 focus:outline-none"
-                          >
-                            <svg 
-                              className={`h-7 w-7 ${
-                                star <= reviewForm.rating ? 'text-yellow-400' : 'text-gray-300'
-                              }`} 
-                              fill="currentColor" 
-                              viewBox="0 0 20 20"
-                            >
-                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                            </svg>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    <div className="mb-4">
-                      <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="comment">
-                        Review Comment
-                      </label>
-                      <textarea
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-                        id="comment"
-                        name="comment"
-                        rows="3"
-                        value={reviewForm.comment}
-                        onChange={handleReviewFormChange}
-                        placeholder="Share your experience working with this client..."
-                        required
-                      ></textarea>
-                    </div>
-                    
-                    <button
-                      type="submit"
-                      className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
-                      disabled={isSubmittingReview}
-                    >
-                      {isSubmittingReview ? 'Submitting...' : 'Submit Review'}
-                    </button>
-                  </form>
-                </div>
-              ) : (
-                <p className="text-gray-500 italic">No review submitted yet.</p>
-              )}
-            </div>
+            {/* Edit option if current user is the client */}
+            {isClient && (
+              <button
+                onClick={() => {
+                  setIsEditingClientReview(true);
+                  setEditingReview(order.reviewByClient);
+                }}
+                className="mt-3 text-blue-500 hover:text-blue-700 text-sm"
+              >
+                Edit Review
+              </button>
+            )}
           </div>
-        </div>
-      )}
+        ) : isClient ? (
+          <div>
+            {isSubmittingClientReview ? (
+              <EnhancedReviewForm 
+                order={order} 
+                onReviewSubmitted={(review, isEditing) => {
+                  fetchOrderDetails(); // Refresh order data
+                  setIsEditingClientReview(false);
+                  setEditingReview(null);
+                }} 
+                existingReview={editingReview}
+              />
+            ) : (
+              <div className="bg-blue-50 p-4 rounded">
+                <p className="mb-3">You haven't reviewed this order yet. Share your experience working with this freelancer.</p>
+                <button
+                  onClick={() => setIsSubmittingClientReview(true)}
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+                >
+                  Write Review
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-gray-500 italic">The client hasn't submitted a review yet.</p>
+        )}
+      </div>
+      
+      {/* Freelancer's Review */}
+      <div>
+        <h3 className="font-semibold mb-3">Freelancer's Review</h3>
+        {order.reviewByFreelancer ? (
+          <div className="bg-gray-50 p-4 rounded">
+            <div className="flex items-center mb-2">
+              <div className="flex mr-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <svg 
+                    key={star} 
+                    className={`h-5 w-5 ${
+                      star <= order.reviewByFreelancer.rating ? 'text-yellow-400' : 'text-gray-300'
+                    }`} 
+                    fill="currentColor" 
+                    viewBox="0 0 20 20"
+                  >
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                  </svg>
+                ))}
+              </div>
+              <span className="text-gray-600">
+                {new Date(order.reviewByFreelancer.createdAt).toLocaleDateString()}
+              </span>
+            </div>
+            {order.reviewByFreelancer.title && (
+              <h4 className="font-bold mb-2">{order.reviewByFreelancer.title}</h4>
+            )}
+            <p className="text-gray-700">{order.reviewByFreelancer.comment}</p>
+            
+            {/* Edit option if current user is the freelancer */}
+            {isFreelancer && (
+              <button
+                onClick={() => {
+                  setIsEditingFreelancerReview(true);
+                  setEditingReview(order.reviewByFreelancer);
+                }}
+                className="mt-3 text-blue-500 hover:text-blue-700 text-sm"
+              >
+                Edit Review
+              </button>
+            )}
+          </div>
+        ) : isFreelancer ? (
+          <div>
+            {isSubmittingFreelancerReview ? (
+              <EnhancedReviewForm 
+                order={order}
+                onReviewSubmitted={(review, isEditing) => {
+                  fetchOrderDetails(); // Refresh order data
+                  setIsEditingFreelancerReview(false);
+                  setEditingReview(null);
+                }}
+                existingReview={editingReview}
+              />
+            ) : (
+              <div className="bg-blue-50 p-4 rounded">
+                <p className="mb-3">You haven't reviewed this order yet. Share your experience working with this client.</p>
+                <button
+                  onClick={() => setIsSubmittingFreelancerReview(true)}
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+                >
+                  Write Review
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-gray-500 italic">The freelancer hasn't submitted a review yet.</p>
+        )}
+      </div>
+    </div>
+  </div>
+)}
       
       {/* Message Section */}
       <div className="bg-white rounded-lg shadow overflow-hidden">

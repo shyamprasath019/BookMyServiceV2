@@ -1,4 +1,4 @@
-// File: client/src/App.js
+// File: client/src/App.js - Update with new review routes
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
@@ -18,8 +18,9 @@ import GigsList from './pages/GigsList';
 import GigDetails from './pages/GigDetails';
 import JobsList from './pages/JobsList';
 import JobDetails from './pages/JobDetails';
-//import FindFreelancers from './pages/FindFreelancers';
-//import FreelancerProfile from './pages/FreelancerProfile';
+import FindFreelancers from './pages/FindFreelancers';
+import FreelancerProfile from './pages/FreelancerProfile';
+import FreelancerReviews from './pages/FreelancerReviews';
 
 // Private Pages
 import Dashboard from './pages/Dashboard';
@@ -32,7 +33,8 @@ import Profile from './pages/Profile';
 import Messages from './pages/Messages';
 import Conversation from './pages/Conversation';
 import Wallet from './components/Wallet';
-//import Portfolio from './pages/Portfolio';
+import Portfolio from './pages/Portfolio';
+import MyReviews from './pages/MyReviews';
 import NotFound from './pages/NotFound';
 
 // Role-based Route Guards
@@ -132,8 +134,9 @@ function App() {
                 <Route path="/jobs/:id" element={<JobDetails />} />
                 
                 {/* Freelancer Routes */}
-                {/* <Route path="/find-freelancers" element={<FindFreelancers />} />
-                <Route path="/freelancers/:id" element={<FreelancerProfile />} /> */}
+                <Route path="/find-freelancers" element={<FindFreelancers />} />
+                <Route path="/freelancers/:id" element={<FreelancerProfile />} />
+                <Route path="/freelancers/:id/reviews" element={<FreelancerReviews />} />
                 
                 {/* Private Routes (require login) */}
                 <Route path="/dashboard" element={
@@ -169,6 +172,12 @@ function App() {
                 <Route path="/orders/:id" element={
                   <PrivateRoute>
                     <OrderDetails />
+                  </PrivateRoute>
+                } />
+                
+                <Route path="/reviews" element={
+                  <PrivateRoute>
+                    <MyReviews />
                   </PrivateRoute>
                 } />
                 
@@ -210,12 +219,12 @@ function App() {
                   </FreelancerRoute>
                 } />
                 
-                {/* <Route path="/portfolio" element={
+                <Route path="/portfolio" element={
                   <FreelancerRoute>
                     <Portfolio />
                   </FreelancerRoute>
-                } /> */}
-                
+                } />
+
                 {/* 404 and Redirects */}
                 <Route path="/404" element={<NotFound />} />
                 <Route path="*" element={<Navigate to="/404" replace />} />
