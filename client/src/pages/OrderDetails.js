@@ -26,21 +26,12 @@ const OrderDetails = () => {
   const [deliverySuccess, setDeliverySuccess] = useState('');
 
   const [isSubmittingClientReview, setIsSubmittingClientReview] = useState(false);
-const [isSubmittingFreelancerReview, setIsSubmittingFreelancerReview] = useState(false);
-const [isEditingClientReview, setIsEditingClientReview] = useState(false);
-const [isEditingFreelancerReview, setIsEditingFreelancerReview] = useState(false);
-const [editingReview, setEditingReview] = useState(null);
+  const [isSubmittingFreelancerReview, setIsSubmittingFreelancerReview] = useState(false);
+  const [isEditingClientReview, setIsEditingClientReview] = useState(false);
+  const [isEditingFreelancerReview, setIsEditingFreelancerReview] = useState(false);
+  const [editingReview, setEditingReview] = useState(null);
   
-// Review form
-  const [reviewForm, setReviewForm] = useState({
-    rating: 5,
-    comment: ''
-  });
-  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
-  const [reviewError, setReviewError] = useState('');
-  const [reviewSuccess, setReviewSuccess] = useState('');
-  
-  // Conversation state - moved outside of useEffect
+  // Conversation state
   const [orderConversation, setOrderConversation] = useState(null);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [isContactLoading, setIsContactLoading] = useState(false);
@@ -586,7 +577,7 @@ const [editingReview, setEditingReview] = useState(null);
       )}
       
       {/* Reviews Section */}
-{order.status === 'completed' && (
+      {order.status === 'completed' && (
   <div className="bg-white rounded-lg shadow overflow-hidden mb-8">
     <div className="p-6">
       <h2 className="text-xl font-bold mb-4">Reviews</h2>
@@ -595,6 +586,7 @@ const [editingReview, setEditingReview] = useState(null);
       <div className="mb-6">
         <h3 className="font-semibold mb-3">Client's Review</h3>
         {order.reviewByClient ? (
+          // Display existing client review
           <div className="bg-gray-50 p-4 rounded">
             <div className="flex items-center mb-2">
               <div className="flex mr-2">
@@ -634,15 +626,17 @@ const [editingReview, setEditingReview] = useState(null);
             )}
           </div>
         ) : isClient ? (
+          // Client review form
           <div>
-            {isSubmittingClientReview ? (
+            {isSubmittingClientReview || isEditingClientReview ? (
               <EnhancedReviewForm 
                 order={order} 
-                onReviewSubmitted={(review, isEditing) => {
+                onReviewSubmitted={(review) => {
                   fetchOrderDetails(); // Refresh order data
+                  setIsSubmittingClientReview(false);
                   setIsEditingClientReview(false);
                   setEditingReview(null);
-                }} 
+                }}
                 existingReview={editingReview}
               />
             ) : (
@@ -666,6 +660,7 @@ const [editingReview, setEditingReview] = useState(null);
       <div>
         <h3 className="font-semibold mb-3">Freelancer's Review</h3>
         {order.reviewByFreelancer ? (
+          // Display existing freelancer review
           <div className="bg-gray-50 p-4 rounded">
             <div className="flex items-center mb-2">
               <div className="flex mr-2">
@@ -705,12 +700,14 @@ const [editingReview, setEditingReview] = useState(null);
             )}
           </div>
         ) : isFreelancer ? (
+          // Freelancer review form
           <div>
-            {isSubmittingFreelancerReview ? (
+            {isSubmittingFreelancerReview || isEditingFreelancerReview ? (
               <EnhancedReviewForm 
                 order={order}
-                onReviewSubmitted={(review, isEditing) => {
+                onReviewSubmitted={(review) => {
                   fetchOrderDetails(); // Refresh order data
+                  setIsSubmittingFreelancerReview(false);
                   setIsEditingFreelancerReview(false);
                   setEditingReview(null);
                 }}

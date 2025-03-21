@@ -40,7 +40,8 @@ router.post('/', verifyToken, async (req, res, next) => {
     // Check if review already exists
     const existingReview = await Review.findOne({
       order: orderId,
-      reviewer: req.user.id
+      reviewer: req.user.id,
+      isVisible: true // Add this condition
     });
     
     if (existingReview) {

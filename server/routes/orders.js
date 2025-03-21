@@ -259,10 +259,14 @@ router.post('/from-bid/:bidId', verifyToken, isActiveClient , async (req, res, n
   // Submit review (client or freelancer)
   router.post('/:id/review', verifyToken, async (req, res, next) => {
     try {
-      const { rating, comment } = req.body;
+      const { rating, comment, title } = req.body;
       
       if (!rating || rating < 1 || rating > 5) {
         return res.status(400).json({ message: 'Rating must be between 1 and 5' });
+      }
+      
+      if (!comment || comment.trim() === '') {
+        return res.status(400).json({ message: 'Review comment is required' });
       }
       
       const order = await Order.findById(req.params.id);
@@ -277,49 +281,114 @@ router.post('/from-bid/:bidId', verifyToken, isActiveClient , async (req, res, n
       }
       
       // Check if user is part of the order
-      if (req.user.id === order.client.toString()) {
-        // Client reviewing freelancer
-        if (order.reviewByClient) {
-          return res.status(400).json({ message: 'You have already submitted a review' });
-        }
-        
-        order.reviewByClient = {
-          rating,
-          comment,
-          createdAt: new Date()
-        };
-        
-        // Update freelancer's avg rating
-        // This would normally be done with an aggregation pipeline
-        // For simplicity, we're just updating it directly here
-        // In production, this should be a separate function or trigger
-        
-      } else if (req.user.id === order.freelancer.toString()) {
-        // Freelancer reviewing client
-        if (order.reviewByFreelancer) {
-          return res.status(400).json({ message: 'You have already submitted a review' });
-        }
-        
-        order.reviewByFreelancer = {
-          rating,
-          comment,
-          createdAt: new Date()
-        };
-        
-        // Update client's avg rating
-        // Same note as above
-        
-      } else {
+      const isClient = req.user.id === order.client.toString();
+      const isFreelancer = req.user.id === order.freelancer.toString();
+      
+      if (!isClient && !isFreelancer) {
         return res.status(403).json({ message: 'Access denied: You are not part of this order' });
       }
       
-      const updatedOrder = await order.save();
+      // Determine which review field to update based on user role
+      const reviewField = isClient ? 'reviewByClient' : 'reviewByFreelancer';
       
-      res.status(200).json(updatedOrder);
+      // Check if user has already submitted a review
+      if (order[reviewField]) {
+        return res.status(400).json({ message: 'You have already submitted a review for this order. You can edit your existing review instead.' });
+      }
+      
+      // Create review object
+      const review = {
+        rating,
+        comment,
+        title: title || '',
+        createdAt: new Date()
+      };
+      
+      // Update the order with the review
+      const updatedOrder = await Order.findByIdAndUpdate(
+        req.params.id,
+        { $set: { [reviewField]: review } },
+        { new: true }
+      );
+      
+      // OPTIONAL: Also create an entry in the dedicated Reviews collection
+      // if you're using a separate Reviews collection
+      
+      res.status(200).json({
+        message: 'Review submitted successfully',
+        review,
+        order: updatedOrder
+      });
     } catch (err) {
+      console.error('Review submission error:', err);
       next(err);
     }
   });
+
+  // Update review (client or freelancer)
+router.put('/:id/review', verifyToken, async (req, res, next) => {
+  try {
+    const { rating, comment, title } = req.body;
+    
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ message: 'Rating must be between 1 and 5' });
+    }
+    
+    if (!comment || comment.trim() === '') {
+      return res.status(400).json({ message: 'Review comment is required' });
+    }
+    
+    const order = await Order.findById(req.params.id);
+    
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+    
+    // Check if user is part of the order
+    const isClient = req.user.id === order.client.toString();
+    const isFreelancer = req.user.id === order.freelancer.toString();
+    
+    if (!isClient && !isFreelancer) {
+      return res.status(403).json({ message: 'Access denied: You are not part of this order' });
+    }
+    
+    // Determine which review field to update based on user role
+    const reviewField = isClient ? 'reviewByClient' : 'reviewByFreelancer';
+    
+    // Check if user has already submitted a review
+    if (!order[reviewField]) {
+      return res.status(400).json({ message: 'You have not submitted a review for this order yet. Please create a new review.' });
+    }
+    
+    // Create updated review object
+    const updatedReview = {
+      ...order[reviewField],
+      rating,
+      comment,
+      title: title || '',
+      updatedAt: new Date()
+    };
+    
+    // Update the order with the review
+    const updatedOrder = await Order.findByIdAndUpdate(
+      req.params.id,
+      { $set: { [reviewField]: updatedReview } },
+      { new: true }
+    );
+    
+    // OPTIONAL: Also update entry in the dedicated Reviews collection
+    // if you're using a separate Reviews collection
+    
+    res.status(200).json({
+      message: 'Review updated successfully',
+      review: updatedReview,
+      order: updatedOrder
+    });
+  } catch (err) {
+    console.error('Review update error:', err);
+    next(err);
+  }
+});
 
   // Create thread for order conversation
 router.post('/:id/thread', verifyToken, async (req, res, next) => {
