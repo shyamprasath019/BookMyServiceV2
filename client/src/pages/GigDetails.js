@@ -50,12 +50,11 @@ const GigDetails = () => {
       setError('');
       setIsContactLoading(true);
       
-      // Create or get conversation with this gig owner
-      const response = await api.get(`/messages/conversation/user/${gig.owner._id}`);
-      const conversationId = response.data._id;
+      // First create a gig thread
+      const threadResponse = await api.post(`/gigs/${gig._id}/thread`);
       
-      // Navigate to the conversation
-      navigate(`/messages/${conversationId}`);
+      // Then navigate to the conversation with the thread selected
+      navigate(`/messages/${threadResponse.data.conversation}?thread=${threadResponse.data._id}`);
     } catch (err) {
       console.error('Error starting conversation:', err);
       setError(err.response?.data?.message || 'Failed to start conversation');

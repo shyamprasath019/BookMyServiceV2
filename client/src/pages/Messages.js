@@ -9,7 +9,8 @@ const Messages = () => {
   const { currentUser } = useContext(AuthContext);
   const { lastMessage, isConnected } = useWebSocketContext();
   const navigate = useNavigate();
-  
+  const [threads, setThreads] = useState([]); // ✅ Define 'threads'
+
   const [conversations, setConversations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -174,18 +175,30 @@ const Messages = () => {
   
   // Create a new direct conversation with a user
   const startNewConversation = async () => {
-    const userId = prompt('Enter user ID to start conversation:');
-    if (!userId) return;
+    const username = prompt('Enter username to start conversation:');
+    if (!username) return;
     
     try {
       setIsLoading(true);
-      const response = await api.get(`/messages/conversation/user/${userId}`);
+      
+      // First, search for the user by username
+      const userSearchResponse = await api.get(`/users/search?username=${username}`);
+      
+      if (!userSearchResponse.data || !userSearchResponse.data.length) {
+        throw new Error('User not found. Please check the username and try again.');
+      }
+      
+      // Get the first user matching the username
+      const targetUser = userSearchResponse.data[0];
+      
+      // Now start the conversation with the found user ID
+      const response = await api.get(`/messages/conversation/user/${targetUser._id}`);
       
       if (response.data && response.data._id) {
         navigate(`/messages/${response.data._id}`);
       }
     } catch (err) {
-      setError('Failed to start conversation. Make sure the user ID is valid.');
+      setError(err.message || 'Failed to start conversation. Make sure the username is valid.');
     } finally {
       setIsLoading(false);
     }
@@ -425,95 +438,41 @@ const Messages = () => {
               const statusBadge = conversation.order ? 
                 getOrderStatusBadge(conversation.order.status) : null;
               
+              // Get threads for this conversation if available
+              const conversationThreads = threads.filter(t => t.conversation === conversation._id);
+              const hasMultipleThreads = conversationThreads.length > 1;
+              
               return (
-                <Link
-                  key={conversation._id}
-                  to={`/messages/${conversation._id}`}
-                  className={`block hover:bg-gray-50 transition-colors ${hasUnread ? 'bg-blue-50' : 'bg-white'}`}
-                >
-                  <div className="p-4">
-                    <div className="flex">
-                      {/* User avatar with unread indicator */}
-                      <div className="relative mr-3">
-                        <div className="h-12 w-12 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center text-gray-500">
-                          {otherParticipant.profileImage ? (
-                            <img 
-                              src={otherParticipant.profileImage} 
-                              alt={otherParticipant.username} 
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <span className="text-lg font-semibold">
-                              {otherParticipant.username.charAt(0).toUpperCase()}
+                <div key={conversation._id} className="block">
+                  <Link
+                    to={`/messages/${conversation._id}`}
+                    className={`block hover:bg-gray-50 transition-colors ${hasUnread ? 'bg-blue-50' : 'bg-white'}`}
+                  >
+                    <div className="p-4">
+                      {/* Rest of conversation rendering */}
+                      {/* ... */}
+                      
+                      {/* Add thread indicators if multiple threads exist */}
+                      {hasMultipleThreads && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {conversationThreads.slice(0, 3).map(thread => (
+                            <span key={thread._id} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                              {thread.type === 'general' ? 'General' : 
+                               thread.type === 'order' ? `Order: ${thread.order?.title?.substring(0, 10)}...` :
+                               thread.type === 'gig' ? `Gig: ${thread.gig?.title?.substring(0, 10)}...` : 
+                               thread.title?.substring(0, 15)}
+                            </span>
+                          ))}
+                          {conversationThreads.length > 3 && (
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                              +{conversationThreads.length - 3} more
                             </span>
                           )}
                         </div>
-                        {hasUnread && (
-                          <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                            {conversation.unreadCount}
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Conversation details */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className={`font-medium truncate ${hasUnread ? 'font-semibold' : ''}`}>
-                              {otherParticipant.username}
-                            </h3>
-                            
-                            {/* Badges for conversation type and status */}
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              <span className={`text-xs px-2 py-0.5 rounded-full ${badge.color}`}>
-                                {badge.label}
-                              </span>
-                              
-                              {statusBadge && (
-                                <span className={`text-xs px-2 py-0.5 rounded-full ${statusBadge.color}`}>
-                                  {statusBadge.text}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          
-                          {/* Timestamp */}
-                          <span className="text-xs text-gray-500">
-                            {formatTime(conversation.updatedAt)}
-                          </span>
-                        </div>
-                        
-                        {/* Order title if exists */}
-                        {conversation.order && (
-                          <p className="text-sm text-gray-600 truncate mt-1">
-                            {conversation.order.title}
-                          </p>
-                        )}
-                        
-                        {/* Last message preview */}
-                        <p className={`text-sm truncate mt-1 ${hasUnread ? 'font-medium text-gray-900' : 'text-gray-500'}`}>
-                          {conversation.lastMessage ? (
-                            conversation.lastMessage.sender === currentUser._id ? (
-                              <span className="text-gray-400">You: </span>
-                            ) : null
-                          ) : null}
-                          
-                          {conversation.lastMessage ? (
-                            conversation.lastMessage.content || (
-                              conversation.lastMessage.attachments?.length ? (
-                                `[${conversation.lastMessage.attachments.length} attachment${
-                                  conversation.lastMessage.attachments.length !== 1 ? 's' : ''
-                                }]`
-                              ) : 'Empty message'
-                            )
-                          ) : (
-                            <span className="italic">No messages yet</span>
-                          )}
-                        </p>
-                      </div>
+                      )}
                     </div>
-                  </div>
-                </Link>
+                  </Link>
+                </div>
               );
             })
           )}

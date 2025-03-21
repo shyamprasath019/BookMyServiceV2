@@ -320,5 +320,56 @@ router.post('/from-bid/:bidId', verifyToken, isActiveClient , async (req, res, n
       next(err);
     }
   });
+
+  // Create thread for order conversation
+router.post('/:id/thread', verifyToken, async (req, res, next) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+    
+    // Check if user is part of the order
+    if (order.client.toString() !== req.user.id && order.freelancer.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Access denied: You are not part of this order' });
+    }
+    
+    // Find or create conversation between these users
+    let conversation = await Conversation.findOne({
+      participants: { $all: [order.client, order.freelancer] }
+    });
+    
+    if (!conversation) {
+      conversation = new Conversation({
+        participants: [order.client, order.freelancer]
+      });
+      
+      await conversation.save();
+    }
+    
+    // Check if thread already exists for this order
+    let thread = await Thread.findOne({
+      conversation: conversation._id,
+      type: 'order',
+      order: order._id
+    });
+    
+    if (!thread) {
+      thread = new Thread({
+        conversation: conversation._id,
+        type: 'order',
+        order: order._id,
+        title: `Order: ${order.title}`
+      });
+      
+      await thread.save();
+    }
+    
+    res.status(200).json(thread);
+  } catch (err) {
+    next(err);
+  }
+});
   
   module.exports = router;

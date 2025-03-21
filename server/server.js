@@ -17,6 +17,7 @@ const paymentRoutes = require('./routes/payments');
 const messageRoutes = require('./routes/messages');
 const walletRoutes = require('./routes/wallet')
 const uploadRoutes = require('./routes/uploads');
+const reviewRoutes = require('./routes/reviews');
 
 // Load environment variables
 dotenv.config();
@@ -45,6 +46,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/uploads', uploadRoutes);
+app.use('/api/reviews', reviewRoutes);
 
 // For the prototype, we'll create the asset directories if they don't exist
 const { createDirIfNotExists } = require('./middleware/fileUpload');
@@ -78,7 +80,7 @@ const PORT = process.env.PORT || 5000;
 const WS_PORT = process.env.WS_PORT || 5001;
 
 // Start the server
-server.listen(PORT, () => {
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`HTTP Server running on port ${PORT}`);
   console.log(`WebSocket Server running on port ${WS_PORT}`);
 });

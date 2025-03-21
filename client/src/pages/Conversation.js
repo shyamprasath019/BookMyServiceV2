@@ -3,9 +3,13 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { useWebSocketContext } from '../utils/websocketService';
 import api from '../utils/api';
+import ThreadList from '../components/ThreadList';
 
 const ConversationHeader = ({ conversation, otherParticipant, isLoading }) => {
   const navigate = useNavigate();
+  const [threadId, setThreadId] = useState(null);
+  const [threads, setThreads] = useState([]);
+  const [isLoadingThreads, setIsLoadingThreads] = useState(true);
   
   if (isLoading || !conversation) {
     return (
@@ -326,34 +330,11 @@ const Conversation = () => {
     };
   }, [id, joinConversation, leaveConversation]);
   
-  // Fetch messages
   useEffect(() => {
-    const fetchMessages = async () => {
-      try {
-        setIsLoadingMessages(true);
-        
-        const response = await api.get(`/messages/conversation/${id}/messages?page=${page}`);
-        
-        if (page === 1) {
-          // First page, replace all messages
-          setMessages(response.data.messages);
-        } else {
-          // Subsequent pages, prepend to existing messages
-          setMessages(prev => [...response.data.messages, ...prev]);
-        }
-        
-        setHasMore(page < response.data.totalPages);
-      } catch (err) {
-        console.error('Error fetching messages:', err);
-      } finally {
-        setIsLoadingMessages(false);
-      }
-    };
-    
-    if (id) {
-      fetchMessages();
+    if (conversation && conversation._id) {
+      fetchThreads();
     }
-  }, [id, page]);
+  }, [conversation]);
   
   // Handle new messages from WebSocket
   useEffect(() => {
@@ -445,6 +426,63 @@ const Conversation = () => {
   const handleRemoveAttachment = (index) => {
     setAttachments(prev => prev.filter((_, i) => i !== index));
   };
+
+  const fetchThreads = async () => {
+    try {
+      setIsLoadingThreads(true);
+      const response = await api.get(`/messages/conversation/${conversation._id}/threads`);
+      
+      setThreads(response.data);
+      
+      // If there are threads but no active thread, select the first one
+      if (response.data.length > 0 && !threadId) {
+        setThreadId(response.data[0]._id);
+      } else if (response.data.length === 0) {
+        // If no threads exist, create a general thread
+        createGeneralThread();
+      }
+    } catch (err) {
+      console.error('Error fetching threads:', err);
+    } finally {
+      setIsLoadingThreads(false);
+    }
+  };
+  
+  // Function to create a general thread if none exist
+  const createGeneralThread = async () => {
+    try {
+      const response = await api.get(`/messages/conversation/${conversation._id}/thread/general`);
+      setThreads([response.data]);
+      setThreadId(response.data._id);
+    } catch (err) {
+      console.error('Error creating general thread:', err);
+    }
+  };
+  
+  // Update fetchMessages to use threadId
+  const fetchMessages = async () => {
+    try {
+      if (!threadId) return;
+      
+      setIsLoadingMessages(true);
+      
+      const response = await api.get(`/messages/thread/${threadId}/messages?page=${page}`);
+      
+      if (page === 1) {
+        // First page, replace all messages
+        setMessages(response.data.messages);
+      } else {
+        // Subsequent pages, prepend to existing messages
+        setMessages(prev => [...response.data.messages, ...prev]);
+      }
+      
+      setHasMore(page < response.data.totalPages);
+    } catch (err) {
+      console.error('Error fetching messages:', err);
+    } finally {
+      setIsLoadingMessages(false);
+    }
+  };
   
   // Send message
   const handleSendMessage = async (e) => {
@@ -468,7 +506,7 @@ const Conversation = () => {
       }
       
       // Send message via API
-      await api.post(`/messages/conversation/${id}`, {
+      await api.post(`/messages/thread/${threadId}`, {
         content: messageText.trim(),
         attachments: uploadedAttachments
       });
@@ -484,6 +522,12 @@ const Conversation = () => {
     } finally {
       setIsSending(false);
     }
+  };
+
+  const handleThreadSelect = (id) => {
+    setThreadId(id);
+    setPage(1); // Reset to first page when changing threads
+    setMessages([]); // Clear messages when changing threads
   };
   
   // Handle open file picker
@@ -520,7 +564,14 @@ const Conversation = () => {
           otherParticipant={otherParticipant} 
           isLoading={isLoading} 
         />
-        
+        {/* Thread List */}
+        {conversation && (
+          <ThreadList
+            conversationId={conversation._id}
+            activeThreadId={threadId}
+            onThreadSelect={handleThreadSelect}
+          />
+        )}
         {/* Messages Container */}
         <div 
           ref={messagesContainerRef}

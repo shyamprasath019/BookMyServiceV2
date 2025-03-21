@@ -210,8 +210,14 @@ const OrderDetails = () => {
   const getOrderConversation = async () => {
     setConversationLoading(true);
     try {
-      const response = await api.get(`/messages/conversation/order/${order._id}`);
-      setOrderConversation(response.data);
+      // First create a thread for this order
+      const threadResponse = await api.post(`/orders/${order._id}/thread`);
+      
+      // Set both the conversation and thread ID
+      setOrderConversation({
+        _id: threadResponse.data.conversation, 
+        threadId: threadResponse.data._id
+      });
     } catch (err) {
       console.error('Error getting order conversation:', err);
       setError('Failed to get conversation for this order');
@@ -769,7 +775,7 @@ const OrderDetails = () => {
             </div>
           ) : orderConversation ? (
             <Link 
-              to={`/messages/${orderConversation._id}`}
+              to={`/messages/${orderConversation._id}?thread=${orderConversation.threadId}`}
               className="inline-block bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
             >
               Open Message Center

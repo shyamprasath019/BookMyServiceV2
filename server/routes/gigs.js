@@ -197,4 +197,54 @@ router.delete('/:id', verifyToken, async (req, res, next) => {
   }
 });
 
+router.post('/:id/thread', verifyToken, async (req, res, next) => {
+  try {
+    const gig = await Gig.findById(req.params.id).populate('owner');
+    
+    if (!gig) {
+      return res.status(404).json({ message: 'Gig not found' });
+    }
+    
+    // Only allow clients (not the owner) to create gig threads
+    if (gig.owner._id.toString() === req.user.id) {
+      return res.status(403).json({ message: 'You cannot create a thread for your own gig' });
+    }
+    
+    // Find or create conversation between these users
+    let conversation = await Conversation.findOne({
+      participants: { $all: [req.user.id, gig.owner._id] }
+    });
+    
+    if (!conversation) {
+      conversation = new Conversation({
+        participants: [req.user.id, gig.owner._id]
+      });
+      
+      await conversation.save();
+    }
+    
+    // Check if thread already exists for this gig
+    let thread = await Thread.findOne({
+      conversation: conversation._id,
+      type: 'gig',
+      gig: gig._id
+    });
+    
+    if (!thread) {
+      thread = new Thread({
+        conversation: conversation._id,
+        type: 'gig',
+        gig: gig._id,
+        title: `Gig: ${gig.title}`
+      });
+      
+      await thread.save();
+    }
+    
+    res.status(200).json(thread);
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

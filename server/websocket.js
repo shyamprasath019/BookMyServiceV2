@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const url = require('url');
 const Message = require('./models/Message');
 const Conversation = require('./models/Conversation');
+const Thread = require('./models/Thread'); // Ensure Thread model is imported
 const User = require('./models/User');
 
 // User connection map
@@ -75,6 +76,14 @@ function setupWebSocketServer(server) {
             
           case 'chat_message':
             await handleChatMessage(ws, data);
+            break;
+            
+          case 'join_thread':
+            await handleJoinThread(ws, data);
+            break;
+            
+          case 'thread_message':
+            await handleThreadMessage(ws, data);
             break;
             
           default:
@@ -262,6 +271,144 @@ async function handleChatMessage(ws, data) {
   }
   
   console.log(`Message sent in conversation ${conversationId} by user ${ws.userId}`);
+}
+
+// Handle thread messages
+async function handleThreadMessage(ws, data) {
+  const { conversationId, threadId, content, attachments } = data;
+  
+  // Validate required fields
+  if (!conversationId || !threadId || !content) {
+    throw new Error('Missing required fields');
+  }
+  
+  // Get thread and validate
+  const thread = await Thread.findById(threadId)
+    .populate({
+      path: 'conversation',
+      select: 'participants'
+    });
+  
+  if (!thread) {
+    throw new Error('Thread not found');
+  }
+  
+  // Validate user is part of conversation
+  const conversation = thread.conversation;
+  if (!conversation.participants.includes(ws.userId)) {
+    throw new Error('You are not part of this conversation');
+  }
+  
+  // Create message
+  const newMessage = new Message({
+    conversation: conversationId,
+    thread: threadId,
+    sender: ws.userId,
+    content,
+    attachments: attachments || []
+  });
+  
+  const savedMessage = await newMessage.save();
+  
+  // Update thread last message and time
+  thread.lastMessage = savedMessage._id;
+  thread.updatedAt = new Date();
+  await thread.save();
+  
+  // Update conversation last activity
+  await Conversation.findByIdAndUpdate(conversationId, {
+    updatedAt: new Date()
+  });
+  
+  // Populate sender info for the response
+  const populatedMessage = await Message.findById(savedMessage._id)
+    .populate('sender', 'username profileImage');
+  
+  // Broadcast to users in the conversation
+  const messageToSend = {
+    type: 'new_message',
+    conversationId,
+    threadId,
+    message: populatedMessage
+  };
+  
+  broadcastToConversation(conversationId, messageToSend);
+  
+  // Mark as read by sender
+  await markMessagesAsRead(threadId, ws.userId);
+}
+
+// Handle joining a thread
+async function handleJoinThread(ws, data) {
+  const { conversationId, threadId } = data;
+  
+  // Validate required fields
+  if (!conversationId || !threadId) {
+    throw new Error('Missing required fields');
+  }
+  
+  // Get thread and validate
+  const thread = await Thread.findById(threadId)
+    .populate({
+      path: 'conversation',
+      select: 'participants'
+    });
+  
+  if (!thread) {
+    throw new Error('Thread not found');
+  }
+  
+  // Validate user is part of conversation
+  const conversation = thread.conversation;
+  if (!conversation.participants.includes(ws.userId)) {
+    throw new Error('You are not part of this conversation');
+  }
+  
+  // Add client to thread room
+  const roomId = `thread:${threadId}`;
+  if (!ws.rooms) {
+    ws.rooms = [];
+  }
+  
+  if (!ws.rooms.includes(roomId)) {
+    ws.rooms.push(roomId);
+  }
+  
+  // Mark messages as read
+  await markMessagesAsRead(threadId, ws.userId);
+  
+  ws.send(JSON.stringify({
+    type: 'thread_joined',
+    threadId
+  }));
+}
+
+// Function to mark messages as read in a thread
+async function markMessagesAsRead(threadId, userId) {
+  try {
+    await Message.updateMany(
+      {
+        thread: threadId,
+        sender: { $ne: userId },
+        isRead: false
+      },
+      { isRead: true }
+    );
+  } catch (error) {
+    console.error('Error marking messages as read:', error);
+  }
+}
+
+// Function to broadcast message to all users in a conversation
+function broadcastToConversation(conversationId, message) {
+  if (conversationSubscriptions.has(conversationId)) {
+    conversationSubscriptions.get(conversationId).forEach(userId => {
+      const userWs = clients.get(userId);
+      if (userWs && userWs.readyState === WebSocket.OPEN) {
+        userWs.send(JSON.stringify(message));
+      }
+    });
+  }
 }
 
 // Export notification function to use in other parts of the app

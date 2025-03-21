@@ -1,10 +1,15 @@
-// File: models/Message.js
+// server/models/Message.js - Update
 const mongoose = require('mongoose');
 
 const MessageSchema = new mongoose.Schema({
   conversation: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Conversation',
+    required: true
+  },
+  thread: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Thread',
     required: true
   },
   sender: {

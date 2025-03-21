@@ -452,4 +452,23 @@ router.delete('/', verifyToken, async (req, res, next) => {
   }
 });
 
+router.get('/search', async (req, res, next) => {
+  try {
+    const { username } = req.query;
+    
+    if (!username) {
+      return res.status(400).json({ message: 'Username is required' });
+    }
+    
+    // Search for users with matching username (case-insensitive)
+    const users = await User.find({ 
+      username: { $regex: username, $options: 'i' } 
+    }).select('_id username profileImage');
+    
+    res.status(200).json(users);
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

@@ -3,7 +3,7 @@ import React, { createContext, useEffect, useState, useCallback, useContext } fr
 import { AuthContext } from '../context/AuthContext';
 
 // WebSocket connection URL
-const WS_URL = process.env.REACT_APP_WS_URL || 'ws://localhost:5001';
+const WS_URL = process.env.REACT_APP_WS_URL || 'ws://localhost:5001/ws';
 
 // Create a new WebSocket service hook
 export const useWebSocket = () => {
@@ -112,6 +112,38 @@ export const useWebSocket = () => {
       attachments
     });
   }, [sendMessage]);
+
+  const joinThread = useCallback((conversationId, threadId) => {
+    if (!conversationId || !threadId) return false;
+    
+    return sendMessage({
+      type: 'join_thread',
+      conversationId,
+      threadId
+    });
+  }, [sendMessage]);
+  
+  const leaveThread = useCallback((conversationId, threadId) => {
+    if (!conversationId || !threadId) return false;
+    
+    return sendMessage({
+      type: 'leave_thread',
+      conversationId,
+      threadId
+    });
+  }, [sendMessage]);
+  
+  const sendThreadMessage = useCallback((conversationId, threadId, content, attachments = []) => {
+    if (!conversationId || !threadId || !content) return false;
+    
+    return sendMessage({
+      type: 'thread_message',
+      conversationId,
+      threadId,
+      content,
+      attachments
+    });
+  }, [sendMessage]);
   
   return {
     socket,
@@ -120,7 +152,10 @@ export const useWebSocket = () => {
     sendMessage,
     joinConversation,
     leaveConversation,
-    sendChatMessage
+    sendChatMessage,
+    joinThread,
+    leaveThread,
+    sendThreadMessage
   };
 };
 
