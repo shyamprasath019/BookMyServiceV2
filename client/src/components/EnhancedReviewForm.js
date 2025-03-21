@@ -1,16 +1,15 @@
 // File: client/src/components/EnhancedReviewForm.js
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import api from '../utils/api';
 
-const EnhancedReviewForm = ({ order, onReviewSubmitted, existingReview = null }) => {
+const EnhancedReviewForm = ({ order, onReviewSubmitted }) => {
   const { currentUser, activeRole } = useContext(AuthContext);
   
   const [formData, setFormData] = useState({
-    orderId: order?._id || '',
-    rating: existingReview ? existingReview.rating : 5,
-    title: existingReview ? existingReview.title : '',
-    comment: existingReview ? existingReview.comment : ''
+    rating: 5,
+    title: '',
+    comment: ''
   });
   
   const [errors, setErrors] = useState({});
@@ -19,19 +18,6 @@ const EnhancedReviewForm = ({ order, onReviewSubmitted, existingReview = null })
   
   // Determine if user is client or freelancer in this order
   const isClient = currentUser && order && order.client._id === currentUser._id;
-  const isFreelancer = currentUser && order && order.freelancer._id === currentUser._id;
-  
-  useEffect(() => {
-    // If the review form is being pre-filled with an existing review
-    if (existingReview) {
-      setFormData({
-        orderId: order?._id || '',
-        rating: existingReview.rating || 5,
-        title: existingReview.title || '',
-        comment: existingReview.comment || ''
-      });
-    }
-  }, [existingReview, order]);
   
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -89,32 +75,13 @@ const EnhancedReviewForm = ({ order, onReviewSubmitted, existingReview = null })
     setErrors({});
     
     try {
-      let response;
-      
-      if (existingReview) {
-        // Update existing review
-        if (existingReview._id) {
-          response = await api.put(`/reviews/${existingReview._id}`, {
-            rating: formData.rating,
-            comment: formData.comment,
-            title: formData.title
-          });
-        } else {
-          // Fallback if somehow we're editing a review without an ID
-          response = await api.post(`/orders/${order._id}/review`, {
-            rating: formData.rating,
-            comment: formData.comment,
-            title: formData.title
-          });
-        }
-      } else {
-        // Create new review through the order endpoint
-        response = await api.post(`/orders/${order._id}/review`, {
-          rating: formData.rating,
-          comment: formData.comment,
-          title: formData.title
-        });
-      }
+      // Create new review using the dedicated reviews endpoint
+      const response = await api.post('/reviews', {
+        orderId: order._id,
+        rating: formData.rating,
+        comment: formData.comment,
+        title: formData.title
+      });
       
       setSubmitSuccess(true);
       
@@ -131,8 +98,8 @@ const EnhancedReviewForm = ({ order, onReviewSubmitted, existingReview = null })
     }
   };
   
-  // If submission succeeded and we weren't editing
-  if (submitSuccess && !existingReview) {
+  // If submission succeeded
+  if (submitSuccess) {
     return (
       <div className="bg-white rounded-lg shadow p-6 mb-6">
         <div className="bg-green-50 border border-green-200 rounded-lg p-4">
@@ -157,7 +124,7 @@ const EnhancedReviewForm = ({ order, onReviewSubmitted, existingReview = null })
   return (
     <div className="bg-white rounded-lg shadow p-6 mb-6">
       <h2 className="text-lg font-semibold mb-4">
-        {existingReview ? 'Edit Your Review' : 'Write a Review'}
+        Write a Review
       </h2>
       
       {errors.form && (
@@ -249,28 +216,12 @@ const EnhancedReviewForm = ({ order, onReviewSubmitted, existingReview = null })
         </div>
         
         <div className="flex items-center justify-end">
-          {existingReview && (
-            <button
-              type="button"
-              className="mr-4 text-gray-600 hover:text-gray-800"
-              onClick={() => onReviewSubmitted?.(existingReview)}
-            >
-              Cancel
-            </button>
-          )}
           <button
             type="submit"
             className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline"
             disabled={isSubmitting}
           >
-            {isSubmitting
-              ? existingReview
-                ? 'Updating...'
-                : 'Submitting...'
-              : existingReview
-                ? 'Update Review'
-                : 'Submit Review'
-            }
+            {isSubmitting ? 'Submitting...' : 'Submit Review'}
           </button>
         </div>
       </form>

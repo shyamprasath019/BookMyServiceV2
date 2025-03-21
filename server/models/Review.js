@@ -1,4 +1,4 @@
-// File: server/models/Review.js
+// In server/models/Review.js (already exists)
 const mongoose = require('mongoose');
 
 const ReviewSchema = new mongoose.Schema({
@@ -44,11 +44,6 @@ const ReviewSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  // Users who marked this review as helpful
-  helpfulVotedBy: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  }],
   // Is this review visible?
   isVisible: {
     type: Boolean,
@@ -60,60 +55,5 @@ const ReviewSchema = new mongoose.Schema({
     default: true
   }
 }, { timestamps: true });
-
-// Update user's average rating when review is created/updated/deleted
-ReviewSchema.post('save', async function(doc) {
-  await updateUserRating(doc.recipient);
-});
-
-ReviewSchema.post('findOneAndUpdate', async function(doc) {
-  if (doc) {
-    await updateUserRating(doc.recipient);
-  }
-});
-
-ReviewSchema.post('findOneAndDelete', async function(doc) {
-  if (doc) {
-    await updateUserRating(doc.recipient);
-  }
-});
-
-// Helper function to update user's average rating
-async function updateUserRating(userId) {
-  const Review = mongoose.model('Review');
-  
-  try {
-    // Calculate average rating from all visible reviews
-    const result = await Review.aggregate([
-      { $match: { recipient: userId, isVisible: true } },
-      { $group: {
-          _id: null,
-          avgRating: { $avg: '$rating' },
-          totalReviews: { $sum: 1 }
-        }
-      }
-    ]);
-    
-    if (result.length > 0) {
-      const { avgRating, totalReviews } = result[0];
-      
-      // Update the user's average rating and total reviews
-      const User = mongoose.model('User');
-      await User.findByIdAndUpdate(userId, {
-        avgRating: parseFloat(avgRating.toFixed(1)),
-        totalReviews
-      });
-    } else {
-      // No reviews - reset rating and total
-      const User = mongoose.model('User');
-      await User.findByIdAndUpdate(userId, {
-        avgRating: 0,
-        totalReviews: 0
-      });
-    }
-  } catch (err) {
-    console.error('Error updating user rating:', err);
-  }
-}
 
 module.exports = mongoose.model('Review', ReviewSchema);

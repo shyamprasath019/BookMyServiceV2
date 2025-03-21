@@ -8,8 +8,8 @@ import EnhancedReviewForm from '../components/EnhancedReviewForm';
 
 const OrderDetails = () => {
   const { id } = useParams();
-  const { currentUser, activeRole } = useContext(AuthContext);
-  const navigate = useNavigate();
+  const { activeRole } = useContext(AuthContext);
+  //const navigate = useNavigate();
   
   const [order, setOrder] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -27,10 +27,14 @@ const OrderDetails = () => {
 
   const [isSubmittingClientReview, setIsSubmittingClientReview] = useState(false);
   const [isSubmittingFreelancerReview, setIsSubmittingFreelancerReview] = useState(false);
-  const [isEditingClientReview, setIsEditingClientReview] = useState(false);
+  //const [isEditingClientReview, setIsEditingClientReview] = useState(false);
   const [isEditingFreelancerReview, setIsEditingFreelancerReview] = useState(false);
   const [editingReview, setEditingReview] = useState(null);
   
+  const [clientReview, setClientReview] = useState(null);
+  const [freelancerReview, setFreelancerReview] = useState(null);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+
   // Conversation state
   const [orderConversation, setOrderConversation] = useState(null);
   const [conversationLoading, setConversationLoading] = useState(false);
@@ -100,33 +104,65 @@ const OrderDetails = () => {
       setIsSubmitting(false);
     }
   };
-  
-  const handleReviewFormChange = (e) => {
-    const { name, value } = e.target;
-    setReviewForm(prev => ({
-      ...prev,
-      [name]: name === 'rating' ? parseInt(value) : value
-    }));
-  };
-  
-  const handleReviewSubmit = async (e) => {
-    e.preventDefault();
-    setIsSubmittingReview(true);
-    setReviewError('');
-    setReviewSuccess('');
+
+  const fetchReviews = async () => {
+    if (!order || !order._id) return;
     
+    setReviewsLoading(true);
     try {
-      const response = await api.post(`/orders/${id}/review`, reviewForm);
-      setReviewSuccess('Your review has been submitted successfully!');
+      // Fetch all reviews for this order
+      const response = await api.get(`/reviews/order/${order._id}`);
+      const reviews = response.data;
       
-      // Refresh order data
-      fetchOrderDetails();
+      // Separate client and freelancer reviews
+      if (reviews && reviews.length > 0) {
+        reviews.forEach(review => {
+          if (review.reviewer._id === order.client._id) {
+            setClientReview(review);
+          } else if (review.reviewer._id === order.freelancer._id) {
+            setFreelancerReview(review);
+          }
+        });
+      }
     } catch (err) {
-      setReviewError(err.response?.data?.message || 'Failed to submit review');
+      console.error('Error fetching reviews:', err);
     } finally {
-      setIsSubmittingReview(false);
+      setReviewsLoading(false);
     }
   };
+  
+  useEffect(() => {
+    if (order && order._id) {
+      fetchReviews();
+    }
+  }, [order]);
+
+  // const handleReviewFormChange = (e) => {
+  //   const { name, value } = e.target;
+  //   setReviewForm(prev => ({
+  //     ...prev,
+  //     [name]: name === 'rating' ? parseInt(value) : value
+  //   }));
+  // };
+  
+  // const handleReviewSubmit = async (e) => {
+  //   e.preventDefault();
+  //   setIsSubmittingReview(true);
+  //   setReviewError('');
+  //   setReviewSuccess('');
+    
+  //   try {
+  //     const response = await api.post(`/orders/${id}/review`, reviewForm);
+  //     setReviewSuccess('Your review has been submitted successfully!');
+      
+  //     // Refresh order data
+  //     fetchOrderDetails();
+  //   } catch (err) {
+  //     setReviewError(err.response?.data?.message || 'Failed to submit review');
+  //   } finally {
+  //     setIsSubmittingReview(false);
+  //   }
+  // };
 
   const handleCancelOrder = async () => {
     if (!window.confirm('Are you sure you want to cancel this order? This action cannot be undone.')) {
@@ -585,8 +621,12 @@ const OrderDetails = () => {
       {/* Client's Review */}
       <div className="mb-6">
         <h3 className="font-semibold mb-3">Client's Review</h3>
-        {order.reviewByClient ? (
-          // Display existing client review
+        {reviewsLoading ? (
+          <div className="flex items-center">
+            <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-500 mr-2"></div>
+            <span>Loading reviews...</span>
+          </div>
+        ) : clientReview ? (
           <div className="bg-gray-50 p-4 rounded">
             <div className="flex items-center mb-2">
               <div className="flex mr-2">
@@ -594,7 +634,7 @@ const OrderDetails = () => {
                   <svg 
                     key={star} 
                     className={`h-5 w-5 ${
-                      star <= order.reviewByClient.rating ? 'text-yellow-400' : 'text-gray-300'
+                      star <= clientReview.rating ? 'text-yellow-400' : 'text-gray-300'
                     }`} 
                     fill="currentColor" 
                     viewBox="0 0 20 20"
@@ -604,40 +644,24 @@ const OrderDetails = () => {
                 ))}
               </div>
               <span className="text-gray-600">
-                {new Date(order.reviewByClient.createdAt).toLocaleDateString()}
+                {new Date(clientReview.createdAt).toLocaleDateString()}
               </span>
             </div>
-            {order.reviewByClient.title && (
-              <h4 className="font-bold mb-2">{order.reviewByClient.title}</h4>
+            {clientReview.title && (
+              <h4 className="font-bold mb-2">{clientReview.title}</h4>
             )}
-            <p className="text-gray-700">{order.reviewByClient.comment}</p>
-            
-            {/* Edit option if current user is the client */}
-            {isClient && (
-              <button
-                onClick={() => {
-                  setIsEditingClientReview(true);
-                  setEditingReview(order.reviewByClient);
-                }}
-                className="mt-3 text-blue-500 hover:text-blue-700 text-sm"
-              >
-                Edit Review
-              </button>
-            )}
+            <p className="text-gray-700">{clientReview.comment}</p>
           </div>
         ) : isClient ? (
-          // Client review form
           <div>
-            {isSubmittingClientReview || isEditingClientReview ? (
+            {isSubmittingClientReview ? (
               <EnhancedReviewForm 
                 order={order} 
                 onReviewSubmitted={(review) => {
-                  fetchOrderDetails(); // Refresh order data
+                  setClientReview(review);
                   setIsSubmittingClientReview(false);
-                  setIsEditingClientReview(false);
-                  setEditingReview(null);
+                  fetchReviews(); // Refresh reviews after submission
                 }}
-                existingReview={editingReview}
               />
             ) : (
               <div className="bg-blue-50 p-4 rounded">
@@ -659,8 +683,12 @@ const OrderDetails = () => {
       {/* Freelancer's Review */}
       <div>
         <h3 className="font-semibold mb-3">Freelancer's Review</h3>
-        {order.reviewByFreelancer ? (
-          // Display existing freelancer review
+        {reviewsLoading ? (
+          <div className="flex items-center">
+            <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-500 mr-2"></div>
+            <span>Loading reviews...</span>
+          </div>
+        ) : freelancerReview ? (
           <div className="bg-gray-50 p-4 rounded">
             <div className="flex items-center mb-2">
               <div className="flex mr-2">
@@ -668,7 +696,7 @@ const OrderDetails = () => {
                   <svg 
                     key={star} 
                     className={`h-5 w-5 ${
-                      star <= order.reviewByFreelancer.rating ? 'text-yellow-400' : 'text-gray-300'
+                      star <= freelancerReview.rating ? 'text-yellow-400' : 'text-gray-300'
                     }`} 
                     fill="currentColor" 
                     viewBox="0 0 20 20"
@@ -678,38 +706,24 @@ const OrderDetails = () => {
                 ))}
               </div>
               <span className="text-gray-600">
-                {new Date(order.reviewByFreelancer.createdAt).toLocaleDateString()}
+                {new Date(freelancerReview.createdAt).toLocaleDateString()}
               </span>
             </div>
-            {order.reviewByFreelancer.title && (
-              <h4 className="font-bold mb-2">{order.reviewByFreelancer.title}</h4>
+            {freelancerReview.title && (
+              <h4 className="font-bold mb-2">{freelancerReview.title}</h4>
             )}
-            <p className="text-gray-700">{order.reviewByFreelancer.comment}</p>
-            
-            {/* Edit option if current user is the freelancer */}
-            {isFreelancer && (
-              <button
-                onClick={() => {
-                  setIsEditingFreelancerReview(true);
-                  setEditingReview(order.reviewByFreelancer);
-                }}
-                className="mt-3 text-blue-500 hover:text-blue-700 text-sm"
-              >
-                Edit Review
-              </button>
-            )}
+            <p className="text-gray-700">{freelancerReview.comment}</p>
           </div>
         ) : isFreelancer ? (
           // Freelancer review form
           <div>
-            {isSubmittingFreelancerReview || isEditingFreelancerReview ? (
+            {isSubmittingFreelancerReview ? (
               <EnhancedReviewForm 
                 order={order}
                 onReviewSubmitted={(review) => {
-                  fetchOrderDetails(); // Refresh order data
+                  setFreelancerReview(review);
                   setIsSubmittingFreelancerReview(false);
-                  setIsEditingFreelancerReview(false);
-                  setEditingReview(null);
+                  fetchReviews()
                 }}
                 existingReview={editingReview}
               />

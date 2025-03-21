@@ -7,6 +7,7 @@ const Order = require('../models/Order');
 const { verifyToken } = require('../middleware/auth');
 
 // Create a review (for a completed order)
+// Create a review (for a completed order)
 router.post('/', verifyToken, async (req, res, next) => {
   try {
     const { orderId, rating, comment, title } = req.body;
@@ -32,16 +33,21 @@ router.post('/', verifyToken, async (req, res, next) => {
       return res.status(400).json({ message: 'Cannot review an incomplete order' });
     }
     
-    // Check if user is the client of this order
-    if (order.client.toString() !== req.user.id) {
-      return res.status(403).json({ message: 'You can only review orders that you placed' });
+    // Determine if the user is client or freelancer
+    const isClient = order.client.toString() === req.user.id;
+    const isFreelancer = order.freelancer.toString() === req.user.id;
+    
+    if (!isClient && !isFreelancer) {
+      return res.status(403).json({ message: 'You are not part of this order' });
     }
     
-    // Check if review already exists
+    // Set recipient based on the reviewer's role
+    const recipientId = isClient ? order.freelancer : order.client;
+    
+    // Check if user already submitted a review for this order
     const existingReview = await Review.findOne({
       order: orderId,
-      reviewer: req.user.id,
-      isVisible: true // Add this condition
+      reviewer: req.user.id
     });
     
     if (existingReview) {
@@ -50,7 +56,7 @@ router.post('/', verifyToken, async (req, res, next) => {
     
     // Create the review
     const newReview = new Review({
-      recipient: order.freelancer,
+      recipient: recipientId,
       reviewer: req.user.id,
       order: orderId,
       rating,
@@ -61,7 +67,7 @@ router.post('/', verifyToken, async (req, res, next) => {
     
     const savedReview = await newReview.save();
     
-    // Populate reviewer info
+    // Populate reviewer info for the response
     await savedReview.populate('reviewer', 'username profileImage');
     
     res.status(201).json(savedReview);
@@ -313,6 +319,64 @@ router.post('/:id/report', verifyToken, async (req, res, next) => {
     res.status(200).json({ 
       message: 'Review has been reported and will be reviewed by our team'
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/order/:orderId', verifyToken, async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    
+    // Find the order
+    const order = await Order.findById(orderId);
+    
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+    
+    // Check if user is part of the order
+    if (order.client.toString() !== req.user.id && order.freelancer.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Access denied: You are not part of this order' });
+    }
+    
+    // Get all reviews for this order
+    const reviews = await Review.find({ order: orderId })
+      .populate('reviewer', 'username profileImage')
+      .populate('recipient', 'username profileImage');
+    
+    res.status(200).json(reviews);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Get reviews for a specific gig
+router.get('/gig/:gigId', async (req, res, next) => {
+  try {
+    const { gigId } = req.params;
+    
+    // First find all orders related to this gig
+    const orders = await Order.find({ gig: gigId, status: 'completed' });
+    
+    if (!orders || orders.length === 0) {
+      return res.status(200).json([]);
+    }
+    
+    // Get all order IDs
+    const orderIds = orders.map(order => order._id);
+    
+    // Find reviews for these orders
+    const reviews = await Review.find({ 
+      order: { $in: orderIds },
+      // Only show client reviews in gig details (clients reviewing freelancers)
+      recipient: orders[0].freelancer // All orders have the same freelancer
+    })
+    .populate('reviewer', 'username profileImage')
+    .populate('order', 'title')
+    .sort({ createdAt: -1 });
+    
+    res.status(200).json(reviews);
   } catch (err) {
     next(err);
   }

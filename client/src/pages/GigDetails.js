@@ -14,6 +14,8 @@ const GigDetails = () => {
   const [error, setError] = useState('');
   const [showOrderConfirm, setShowOrderConfirm] = useState(false);
   const [isContactLoading, setIsContactLoading] = useState(false);
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
 
   useEffect(() => {
     fetchGigDetails();
@@ -31,6 +33,27 @@ const GigDetails = () => {
       setIsLoading(false);
     }
   };
+
+  const fetchGigReviews = async () => {
+    if (!gig || !gig._id) return;
+    
+    setReviewsLoading(true);
+    try {
+      const response = await api.get(`/reviews/gig/${gig._id}`);
+      setReviews(response.data);
+    } catch (err) {
+      console.error('Error fetching gig reviews:', err);
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+  
+  // Call this in useEffect after gig is loaded
+  useEffect(() => {
+    if (gig && gig._id) {
+      fetchGigReviews();
+    }
+  }, [gig]);
   
   const handleCreateOrder = async () => {
     try {
@@ -226,13 +249,95 @@ const GigDetails = () => {
             </div>
           </div>
           
-          {/* Reviews Section (placeholder) */}
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="p-6">
-              <h2 className="text-xl font-semibold mb-4">Reviews</h2>
-              <p className="text-gray-500 italic">No reviews yet for this gig.</p>
+          {/* Reviews Section */}
+<div className="bg-white rounded-lg shadow overflow-hidden">
+  <div className="p-6">
+    <h2 className="text-xl font-semibold mb-4">Reviews</h2>
+    
+    {reviewsLoading ? (
+      <div className="flex justify-center items-center py-4">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+        <span className="ml-2">Loading reviews...</span>
+      </div>
+    ) : reviews.length > 0 ? (
+      <div className="space-y-6">
+        {reviews.map(review => (
+          <div key={review._id} className="mb-6 pb-6 border-b border-gray-200 last:border-b-0 last:mb-0 last:pb-0">
+            <div className="flex justify-between items-start mb-3">
+              <div className="flex items-center">
+                <div className="h-10 w-10 rounded-full bg-gray-200 overflow-hidden mr-3">
+                  {review.reviewer?.profileImage ? (
+                    <img
+                      src={review.reviewer.profileImage}
+                      alt={review.reviewer.username}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center bg-blue-500 text-white font-semibold">
+                      {review.reviewer?.username ? review.reviewer.username.charAt(0).toUpperCase() : 'U'}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className="font-semibold">
+                    {review.reviewer?.username || 'Anonymous User'}
+                  </div>
+                  <div className="text-xs text-gray-500">{new Date(review.createdAt).toLocaleDateString()}</div>
+                </div>
+              </div>
+              
+              {/* Rating Stars */}
+              <div className="flex">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <svg
+                    key={star}
+                    className={`h-5 w-5 ${
+                      star <= review.rating ? 'text-yellow-400' : 'text-gray-300'
+                    }`}
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                  </svg>
+                ))}
+              </div>
             </div>
+            
+            {/* Review Title (if present) */}
+            {review.title && (
+              <h3 className="font-bold text-lg mb-2">{review.title}</h3>
+            )}
+            
+            {/* Review Content */}
+            <p className="text-gray-700 mb-3 whitespace-pre-line">{review.comment}</p>
+            
+            {/* Verified Badge */}
+            {review.isVerified && (
+              <div className="flex items-center text-green-600 text-sm mb-3">
+                <svg
+                  className="h-4 w-4 mr-1"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+                <span>Verified Purchase</span>
+              </div>
+            )}
           </div>
+        ))}
+      </div>
+    ) : (
+      <p className="text-gray-500 italic">No reviews yet for this gig.</p>
+    )}
+  </div>
+</div>
         </div>
         
         {/* Sidebar */}
