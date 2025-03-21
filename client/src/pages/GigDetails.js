@@ -73,16 +73,18 @@ const GigDetails = () => {
       setError('');
       setIsContactLoading(true);
       
-      // First create a gig thread
-      const threadResponse = await api.post(`/gigs/${gig._id}/thread`);
+      // First, create a conversation with the freelancer
+      const conversationResponse = await api.get(`/messages/conversation/user/${gig.owner._id}`);
       
-      // Then navigate to the conversation with the thread selected
-      navigate(`/messages/${threadResponse.data.conversation}?thread=${threadResponse.data._id}`);
+      if (!conversationResponse.data || !conversationResponse.data._id) {
+        throw new Error('Failed to start conversation');
+      }
+      
+      // Navigate to the created conversation
+      navigate(`/messages/${conversationResponse.data._id}`);
     } catch (err) {
       console.error('Error starting conversation:', err);
       setError(err.response?.data?.message || 'Failed to start conversation');
-      
-      // Show an alert since we don't know if toast is available
       alert('Failed to start conversation. Please try again.');
     } finally {
       setIsContactLoading(false);

@@ -8,7 +8,7 @@ import EnhancedReviewForm from '../components/EnhancedReviewForm';
 
 const OrderDetails = () => {
   const { id } = useParams();
-  const { activeRole } = useContext(AuthContext);
+  const { currentUser, activeRole } = useContext(AuthContext);
   //const navigate = useNavigate();
   
   const [order, setOrder] = useState(null);
@@ -236,22 +236,23 @@ const OrderDetails = () => {
         throw new Error('Invalid order data');
       }
       
-      // First try to get an existing order conversation
+      // First try to get an existing conversation between participants
       try {
-        const convResponse = await api.get(`/messages/conversation/order/${order._id}`);
+        // Find conversation based on participants instead of order
+        const convResponse = await api.get(`/messages/conversation/user/${
+          order.client._id === currentUser._id ? order.freelancer._id : order.client._id
+        }`);
+        
+        // If found, create an order thread if it doesn't exist
+        const orderThreadResponse = await api.get(`/messages/conversation/${convResponse.data._id}/thread/order/${order._id}`);
+        
         setOrderConversation({
           _id: convResponse.data._id,
-          threadId: convResponse.data._id  // Initially use the conversation ID as thread ID
+          threadId: orderThreadResponse.data._id
         });
       } catch (error) {
-        // If not found, create a new thread for this order
-        const threadResponse = await api.post(`/orders/${order._id}/thread`);
-        
-        // Set both the conversation and thread ID
-        setOrderConversation({
-          _id: threadResponse.data.conversation, 
-          threadId: threadResponse.data._id
-        });
+        console.error('Error with conversation/thread:', error);
+        setError('Failed to get conversation for this order');
       }
     } catch (err) {
       console.error('Error getting order conversation:', err);

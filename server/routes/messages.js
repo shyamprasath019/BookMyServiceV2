@@ -60,20 +60,29 @@ router.get('/conversation/user/:userId', verifyToken, async (req, res, next) => 
       return res.status(404).json({ message: 'User not found' });
     }
     
-    // Find existing conversation between these two users (that isn't tied to an order)
+    // Find existing conversation between these two users
+    // Note: We need to find any conversation between these users, regardless of order or order association
     let conversation = await Conversation.findOne({
       participants: { $all: [currentUserId, targetUserId] },
-      order: { $exists: false }
+      // Don't add order filter here to find general conversations too
     });
     
     // If no conversation exists, create a new one
     if (!conversation) {
       conversation = new Conversation({
         participants: [currentUserId, targetUserId]
-        // No order associated with this conversation
       });
       
       await conversation.save();
+      
+      // Create a general thread for the new conversation
+      const generalThread = new Thread({
+        conversation: conversation._id,
+        type: 'general',
+        title: 'General'
+      });
+      
+      await generalThread.save();
     }
     
     // Populate participant information

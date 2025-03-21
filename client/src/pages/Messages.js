@@ -185,8 +185,10 @@ const Messages = () => {
       // First, search for the user by username
       const userSearchResponse = await api.get(`/users/search?username=${username}`);
       
-      if (!userSearchResponse.data || !userSearchResponse.data.length) {
-        throw new Error('User not found. Please check the username and try again.');
+      if (!userSearchResponse.data || userSearchResponse.data.length === 0) {
+        alert('User not found. Please check the username and try again.');
+        setIsLoading(false);
+        return;
       }
       
       // Get the first user matching the username
@@ -199,7 +201,9 @@ const Messages = () => {
         navigate(`/messages/${response.data._id}`);
       }
     } catch (err) {
-      setError(err.message || 'Failed to start conversation. Make sure the username is valid.');
+      console.error('Error starting conversation:', err);
+      setError(err.response?.data?.message || 'Failed to start conversation');
+      alert('Failed to start conversation. Please try again.');
     } finally {
       setIsLoading(false);
     }
