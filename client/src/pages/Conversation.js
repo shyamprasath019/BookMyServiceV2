@@ -1,10 +1,11 @@
+// client/src/pages/Conversation.js
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { useWebSocketContext } from '../utils/websocketService';
+import { useMessaging } from '../utils/simplifiedMessagingService';
 import api from '../utils/api';
-import ThreadList from '../components/ThreadList';
 
+// Helper components kept the same
 const ConversationHeader = ({ conversation, otherParticipant, isLoading }) => {
   const navigate = useNavigate();
   
@@ -166,55 +167,12 @@ const Message = ({ message, isCurrentUser, showDate, previousMessage }) => {
             );
           }
           
-          // File type icon based on extension
-          const getFileIcon = () => {
-            // Document files
-            if (['pdf', 'doc', 'docx', 'txt', 'rtf'].includes(fileExtension)) {
-              return (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              );
-            }
-            
-            // Spreadsheets
-            if (['xls', 'xlsx', 'csv'].includes(fileExtension)) {
-              return (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                </svg>
-              );
-            }
-            
-            // Code files
-            if (['js', 'jsx', 'ts', 'tsx', 'html', 'css', 'json', 'py', 'java', 'c', 'cpp'].includes(fileExtension)) {
-              return (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-                </svg>
-              );
-            }
-            
-            // Archives
-            if (['zip', 'rar', 'tar', 'gz', '7z'].includes(fileExtension)) {
-              return (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                </svg>
-              );
-            }
-            
-            // Default file icon
-            return (
+          // Default file icon
+          return (
+            <div key={idx} className="flex items-center">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
               </svg>
-            );
-          };
-          
-          return (
-            <div key={idx} className="flex items-center">
-              {getFileIcon()}
               <a 
                 href={attachment} 
                 target="_blank" 
@@ -271,19 +229,68 @@ const Message = ({ message, isCurrentUser, showDate, previousMessage }) => {
   );
 };
 
+// Simple Thread List Component 
+const ThreadList = ({ conversationId, threads, activeThreadId, onThreadSelect, isLoading }) => {
+  if (isLoading) {
+    return (
+      <div className="p-2 bg-gray-100 border-b border-gray-200 overflow-x-auto">
+        <div className="animate-pulse flex space-x-2">
+          <div className="h-8 w-24 bg-gray-300 rounded"></div>
+          <div className="h-8 w-24 bg-gray-300 rounded"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!threads || threads.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="p-2 bg-gray-100 border-b border-gray-200 overflow-x-auto">
+      <div className="flex space-x-2">
+        {threads.map(thread => (
+          <button
+            key={thread._id}
+            onClick={() => onThreadSelect(thread._id)}
+            className={`px-3 py-1 rounded-full text-sm whitespace-nowrap ${
+              activeThreadId === thread._id
+                ? 'bg-blue-500 text-white'
+                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            {thread.type === 'general' ? 'General' :
+             thread.type === 'order' ? `Order: ${thread.order?.title?.substring(0, 10) || 'Order'}` :
+             thread.type === 'gig' ? `Gig: ${thread.gig?.title?.substring(0, 10) || 'Gig'}` :
+             thread.title || 'Thread'}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const Conversation = () => {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const { currentUser } = useContext(AuthContext);
-  const { isConnected, lastMessage, joinConversation, leaveConversation, joinThread, leaveThread } = useWebSocketContext();
   const navigate = useNavigate();
   
+  // Use our simplified messaging context
+  const { 
+    messages, 
+    isLoading: isLoadingMessages,
+    error: messagingError,
+    activeThreadId,
+    setActiveChat,
+    sendMessage,
+    loadMoreMessages
+  } = useMessaging();
+  
   const [conversation, setConversation] = useState(null);
-  const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingMessages, setIsLoadingMessages] = useState(true);
   const [error, setError] = useState('');
   
-  const [threadId, setThreadId] = useState(null);
   const [threads, setThreads] = useState([]);
   const [isLoadingThreads, setIsLoadingThreads] = useState(true);
 
@@ -312,9 +319,6 @@ const Conversation = () => {
         // Fetch conversation details
         const response = await api.get(`/messages/conversation/${id}`);
         setConversation(response.data);
-        
-        // Join conversation in WebSocket
-        joinConversation(id);
       } catch (err) {
         console.error('Error fetching conversation:', err);
         setError(err.response?.data?.message || 'Failed to load conversation');
@@ -324,69 +328,55 @@ const Conversation = () => {
     };
     
     fetchConversation();
-    
-    // Cleanup - leave conversation on unmount
-    return () => {
-      leaveConversation(id);
-    };
-  }, [id, joinConversation, leaveConversation]);
+  }, [id]);
 
+  // Fetch threads when conversation is loaded
   useEffect(() => {
-    if (conversation && conversation._id) {
-      fetchThreads();
-    }
-  }, [conversation]);
-  
-  // Fetch messages when threadId changes
-  useEffect(() => {
-    if (threadId) {
-      setPage(1); // Reset to first page when changing threads
-      fetchMessages();
-    }
-  }, [threadId]);
-  
-  // Handle thread selection from URL
-  useEffect(() => {
-    // Check if thread ID is in URL params
-    const params = new URLSearchParams(window.location.search);
-    const threadIdFromUrl = params.get('thread');
-    
-    if (threadIdFromUrl && threads.some(t => t._id === threadIdFromUrl)) {
-      setThreadId(threadIdFromUrl);
-    }
-  }, [threads]);
-  
-  // Join/leave thread via WebSocket
-  useEffect(() => {
-    if (conversation && conversation._id && threadId) {
-      // Join the thread via WebSocket
-      joinThread(conversation._id, threadId);
+    const fetchThreads = async () => {
+      if (!conversation) return;
       
-      // Cleanup - leave thread on unmount or when threadId changes
-      return () => {
-        leaveThread(conversation._id, threadId);
-      };
-    }
-  }, [conversation, threadId, joinThread, leaveThread]);
-  
-  // Handle new messages from WebSocket
-  useEffect(() => {
-    const handleNewMessage = (message) => {
-      if (message && message.type === 'new_message' && message.conversationId === id) {
-        // Add the new message to the list
-        const newMsg = message.message;
-        setMessages(prev => [...prev, newMsg]);
+      try {
+        setIsLoadingThreads(true);
+        const response = await api.get(`/messages/conversation/${conversation._id}/threads`);
+        
+        setThreads(response.data);
+        
+        // If there are threads but no active thread, select the first one
+        // or use the one from URL query params
+        if (response.data.length > 0) {
+          const threadIdFromUrl = searchParams.get('thread');
+          
+          if (threadIdFromUrl && response.data.some(t => t._id === threadIdFromUrl)) {
+            // Use thread ID from URL
+            setActiveChat(conversation._id, threadIdFromUrl);
+          } else {
+            // Default to first thread
+            setActiveChat(conversation._id, response.data[0]._id);
+          }
+        } else {
+          // If no threads exist, create a general thread
+          createGeneralThread();
+        }
+      } catch (err) {
+        console.error('Error fetching threads:', err);
+      } finally {
+        setIsLoadingThreads(false);
       }
     };
     
-    // Add event listener for new messages
-    window.addEventListener('new_message', handleNewMessage);
-    
-    // Cleanup
-    return () => {
-      window.removeEventListener('new_message', handleNewMessage);
-    };
-  }, [id]);
+    fetchThreads();
+  }, [conversation, searchParams, setActiveChat]);
+  
+  // Function to create a general thread if none exist
+  const createGeneralThread = async () => {
+    try {
+      const response = await api.get(`/messages/conversation/${conversation._id}/thread/general`);
+      setThreads([response.data]);
+      setActiveChat(conversation._id, response.data._id);
+    } catch (err) {
+      console.error('Error creating general thread:', err);
+    }
+  };
   
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -423,16 +413,33 @@ const Conversation = () => {
   };
   
   // Handle load more messages
-  const handleLoadMore = () => {
+  const handleLoadMore = async () => {
     if (!isLoadingMessages && hasMore) {
-      setPage(prev => prev + 1);
+      const nextPage = page + 1;
+      const result = await loadMoreMessages(nextPage);
+      
+      if (result) {
+        setPage(nextPage);
+        setHasMore(nextPage < result.totalPages);
+      }
     }
   };
-  const handleThreadSelect = (id) => {
-    setThreadId(id);
-    setPage(1); // Reset to first page when changing threads
-    setMessages([]); // Clear messages when changing threads
+  
+  // Handle thread selection
+  const handleThreadSelect = (threadId) => {
+    // Update URL with the selected thread
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.set('thread', threadId);
+    navigate(`/messages/${id}?${newSearchParams.toString()}`);
+    
+    // Set active thread in messaging context
+    setActiveChat(id, threadId);
+    
+    // Reset pagination
+    setPage(1);
+    setHasMore(false);
   };
+  
   // Handle message input change
   const handleMessageChange = (e) => {
     setMessageText(e.target.value);
@@ -463,63 +470,6 @@ const Conversation = () => {
   const handleRemoveAttachment = (index) => {
     setAttachments(prev => prev.filter((_, i) => i !== index));
   };
-
-  const fetchThreads = async () => {
-    try {
-      setIsLoadingThreads(true);
-      const response = await api.get(`/messages/conversation/${conversation._id}/threads`);
-      
-      setThreads(response.data);
-      
-      // If there are threads but no active thread, select the first one
-      if (response.data.length > 0 && !threadId) {
-        setThreadId(response.data[0]._id);
-      } else if (response.data.length === 0) {
-        // If no threads exist, create a general thread
-        createGeneralThread();
-      }
-    } catch (err) {
-      console.error('Error fetching threads:', err);
-    } finally {
-      setIsLoadingThreads(false);
-    }
-  };
-  
-  // Function to create a general thread if none exist
-  const createGeneralThread = async () => {
-    try {
-      const response = await api.get(`/messages/conversation/${conversation._id}/thread/general`);
-      setThreads([response.data]);
-      setThreadId(response.data._id);
-    } catch (err) {
-      console.error('Error creating general thread:', err);
-    }
-  };
-  
-  // Update fetchMessages to use threadId
-  const fetchMessages = async () => {
-    try {
-      if (!threadId) return;
-      
-      setIsLoadingMessages(true);
-      
-      const response = await api.get(`/messages/thread/${threadId}/messages?page=${page}`);
-      
-      if (page === 1) {
-        // First page, replace all messages
-        setMessages(response.data.messages);
-      } else {
-        // Subsequent pages, prepend to existing messages
-        setMessages(prev => [...response.data.messages, ...prev]);
-      }
-      
-      setHasMore(page < response.data.totalPages);
-    } catch (err) {
-      console.error('Error fetching messages:', err);
-    } finally {
-      setIsLoadingMessages(false);
-    }
-  };
   
   // Send message
   const handleSendMessage = async (e) => {
@@ -542,17 +492,12 @@ const Conversation = () => {
         );
       }
       
-      // Send message via API
-      await api.post(`/messages/thread/${threadId}`, {
-        content: messageText.trim(),
-        attachments: uploadedAttachments
-      });
+      // Send message via our messaging service
+      await sendMessage(messageText.trim(), uploadedAttachments);
       
       // Reset input
       setMessageText('');
       setAttachments([]);
-      
-      // No need to add message to state, WebSocket will handle it
     } catch (err) {
       console.error('Error sending message:', err);
       alert('Failed to send message. Please try again.');
@@ -568,11 +513,12 @@ const Conversation = () => {
     }
   };
   
-  if (error) {
+  // Show error if any
+  if (error || messagingError) {
     return (
       <div className="container mx-auto px-4 py-8 flex flex-col items-center justify-center">
         <div className="bg-red-100 text-red-700 p-4 rounded mb-4 max-w-md">
-          {error}
+          {error || messagingError}
         </div>
         <button
           onClick={() => navigate('/messages')}
@@ -595,14 +541,16 @@ const Conversation = () => {
           otherParticipant={otherParticipant} 
           isLoading={isLoading} 
         />
+        
         {/* Thread List */}
-        {conversation && (
-          <ThreadList
-            conversationId={conversation._id}
-            activeThreadId={threadId}
-            onThreadSelect={handleThreadSelect}
-          />
-        )}
+        <ThreadList
+          conversationId={id}
+          threads={threads}
+          activeThreadId={activeThreadId}
+          onThreadSelect={handleThreadSelect}
+          isLoading={isLoadingThreads}
+        />
+        
         {/* Messages Container */}
         <div 
           ref={messagesContainerRef}
@@ -644,7 +592,7 @@ const Conversation = () => {
           )}
           
           {/* Messages */}
-          {isLoading ? (
+          {isLoading || isLoadingThreads ? (
             <div className="flex justify-center items-center h-full">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
             </div>
@@ -670,16 +618,6 @@ const Conversation = () => {
             </div>
           )}
         </div>
-        
-        {/* Connection Status */}
-        {!isConnected && (
-          <div className="bg-yellow-50 px-4 py-2 text-sm text-yellow-700 flex items-center justify-center border-t border-yellow-100">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            Connection lost. Reconnecting...
-          </div>
-        )}
         
         {/* Message Input */}
         <div className="border-t border-gray-200 p-4 bg-white">

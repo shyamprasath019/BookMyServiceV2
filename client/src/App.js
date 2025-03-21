@@ -1,8 +1,8 @@
-// File: client/src/App.js - Update with new review routes
+// File: client/src/App.js - Update to use MessagingProvider
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
-import { WebSocketProvider } from './utils/websocketService';
+import { MessagingProvider } from './utils/simplifiedMessagingService';
 import { AuthContext } from './context/AuthContext';
 
 // Layout Components
@@ -114,7 +114,8 @@ const FreelancerRoleCheck = ({ children }) => {
 function App() {
   return (
     <AuthProvider>
-      <WebSocketProvider>
+      {/* Replace WebSocketProvider with MessagingProvider */}
+      <MessagingProvider>
         <Router>
           <div className="min-h-screen flex flex-col">
             <Navbar />
@@ -233,7 +234,7 @@ function App() {
             <Footer />
           </div>
         </Router>
-      </WebSocketProvider>
+      </MessagingProvider>
     </AuthProvider>
   );
 }

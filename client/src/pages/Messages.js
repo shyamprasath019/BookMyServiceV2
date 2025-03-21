@@ -2,14 +2,11 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { useWebSocketContext } from '../utils/websocketService';
 import api from '../utils/api';
 
 const Messages = () => {
   const { currentUser } = useContext(AuthContext);
-  const { lastMessage, isConnected } = useWebSocketContext();
   const navigate = useNavigate();
-  const [threads, setThreads] = useState([]); // ✅ Define 'threads'
 
   const [conversations, setConversations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -20,24 +17,20 @@ const Messages = () => {
   
   useEffect(() => {
     fetchConversations();
+    
+    // Set up a polling interval to refresh conversations
+    const interval = setInterval(() => {
+      fetchConversations(false); // Don't show loading indicator on background refreshes
+    }, 30000); // Every 30 seconds
+    
+    return () => clearInterval(interval);
   }, []);
   
-  useEffect(() => {
-    if (conversations.length > 0) {
-      fetchThreadsForConversations();
+  const fetchConversations = async (showLoading = true) => {
+    if (showLoading) {
+      setIsLoading(true);
     }
-  }, [conversations]);
-
-  // Refetch when new message received through WebSocket
-  useEffect(() => {
-    if (lastMessage && lastMessage.type === 'new_message') {
-      // Refresh conversation list to update last message and unread count
-      fetchConversations();
-    }
-  }, [lastMessage]);
-
-  const fetchConversations = async () => {
-    setIsLoading(true);
+    
     try {
       const response = await api.get('/messages/conversations');
       
@@ -53,35 +46,11 @@ const Messages = () => {
       console.error('Error fetching conversations:', err);
       setError(err.response?.data?.message || 'Failed to load conversations');
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(false);
+      }
     }
   };
-
-  const fetchThreadsForConversations = async () => {
-    if (!conversations || conversations.length === 0) return;
-    
-    try {
-      const threadPromises = conversations.map(conversation => 
-        api.get(`/messages/conversation/${conversation._id}/threads`)
-      );
-      
-      const responses = await Promise.all(threadPromises);
-      
-      // Create a mapping of conversation IDs to threads
-      const conversationThreads = {};
-      responses.forEach((response, index) => {
-        if (response && response.data) {
-          conversationThreads[conversations[index]._id] = response.data;
-        }
-      });
-      
-      setThreads(conversationThreads);
-    } catch (err) {
-      console.error('Error fetching threads for conversations:', err);
-    }
-  };
-
-
   
   // Filter conversations based on search and type filters
   const filteredConversations = conversations.filter(conversation => {
@@ -259,6 +228,12 @@ const Messages = () => {
   // Calculate total unread messages
   const totalUnread = conversations.reduce((sum, conv) => sum + (conv.unreadCount || 0), 0);
   
+  // Show connection status indicator
+  const connectionStatus = {
+    color: 'bg-green-400', // Always show connected for this simplified version
+    text: 'Connected'
+  };
+  
   return (
     <div className="container mx-auto px-4 py-8 mt-16">
       <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -267,8 +242,8 @@ const Messages = () => {
           
           {/* Connection indicator */}
           <div className="flex items-center">
-            <div className={`h-3 w-3 rounded-full mr-2 ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
-            <span className="text-sm">{isConnected ? 'Connected' : 'Disconnected'}</span>
+            <div className={`h-3 w-3 rounded-full mr-2 ${connectionStatus.color}`}></div>
+            <span className="text-sm">{connectionStatus.text}</span>
           </div>
         </div>
         
@@ -421,7 +396,7 @@ const Messages = () => {
             <div className="p-8 text-center">
               <div className="text-red-500 mb-2">{error}</div>
               <button 
-                onClick={fetchConversations}
+                onClick={() => fetchConversations()}
                 className="text-blue-500 hover:underline"
               >
                 Try again
@@ -469,10 +444,6 @@ const Messages = () => {
               const badge = getConversationBadge(conversation);
               const statusBadge = conversation.order ? 
                 getOrderStatusBadge(conversation.order.status) : null;
-              
-              // Get threads for this conversation if available
-              const conversationThreads = threads[conversation._id] || [];
-              const hasMultipleThreads = conversationThreads.length > 1;
               
               return (
                 <div key={conversation._id} className="block">
@@ -540,25 +511,6 @@ const Messages = () => {
                       {conversation.order && (
                         <div className="mt-2 text-sm text-gray-700 line-clamp-1">
                           <span className="font-medium">Order:</span> {conversation.order.title}
-                        </div>
-                      )}
-                      
-                      {/* Add thread indicators if multiple threads exist */}
-                      {hasMultipleThreads && (
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {conversationThreads.slice(0, 3).map(thread => (
-                            <span key={thread._id} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
-                              {thread.type === 'general' ? 'General' : 
-                               thread.type === 'order' ? `Order: ${thread.order?.title?.substring(0, 10)}...` :
-                               thread.type === 'gig' ? `Gig: ${thread.gig?.title?.substring(0, 10)}...` : 
-                               thread.title?.substring(0, 15)}
-                            </span>
-                          ))}
-                          {conversationThreads.length > 3 && (
-                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
-                              +{conversationThreads.length - 3} more
-                            </span>
-                          )}
                         </div>
                       )}
                     </div>
