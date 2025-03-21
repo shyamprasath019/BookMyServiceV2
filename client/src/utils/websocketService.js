@@ -1,5 +1,5 @@
 // client/src/utils/websocketService.js
-import { useEffect, useState, useCallback, useContext } from 'react';
+import React, { createContext, useEffect, useState, useCallback, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 
 // WebSocket connection URL
@@ -125,8 +125,6 @@ export const useWebSocket = () => {
 };
 
 // Create a WebSocket context for app-wide access
-import React, { createContext, useContext as useReactContext } from 'react';
-
 const WebSocketContext = createContext(null);
 
 export const WebSocketProvider = ({ children }) => {
@@ -140,5 +138,5 @@ export const WebSocketProvider = ({ children }) => {
 };
 
 export const useWebSocketContext = () => {
-  return useReactContext(WebSocketContext);
+  return useContext(WebSocketContext);
 };
