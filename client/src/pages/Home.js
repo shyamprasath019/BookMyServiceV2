@@ -185,7 +185,7 @@ const Home = () => {
         </div>
       </div>
       
-      {/* Stats Section */}
+      {/* Stats Section
       <div className="bg-white py-16">
         <div className="container mx-auto px-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
@@ -207,7 +207,7 @@ const Home = () => {
             </div>
           </div>
         </div>
-      </div>
+      </div> */}
       
       {/* Categories Section - Enhanced */}
       <div className="py-20 bg-gray-50">
@@ -374,7 +374,7 @@ const Home = () => {
         </div>
       </div>
       
-      {/* Testimonials Section - New */}
+      {/* Testimonials Section - New
       <div className="py-20 bg-white">
         <div className="container mx-auto px-6">
           <div className="text-center mb-16">
@@ -407,7 +407,7 @@ const Home = () => {
           </div>
         </div>
       </div>
-      
+       */}
       {/* Improved CTA Section */}
       <div className="py-16 bg-gradient-to-r from-blue-600 to-indigo-700 relative overflow-hidden">
         <div className="absolute inset-0">

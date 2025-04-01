@@ -330,6 +330,22 @@ const Conversation = () => {
     fetchConversation();
   }, [id]);
 
+  useEffect(() => {
+    // We need to use the fetchMessages from the messaging context
+    if (activeThreadId) {
+      // Initial load of messages
+      loadMoreMessages(1);
+      
+      // Set up polling every 3 seconds
+      const interval = setInterval(() => {
+        loadMoreMessages(1); // Use the loadMoreMessages from useMessaging context
+      }, 3000);
+      
+      // Clean up interval on unmount or when thread changes
+      return () => clearInterval(interval);
+    }
+  }, [activeThreadId, loadMoreMessages]);
+
   // Fetch threads when conversation is loaded
   useEffect(() => {
     const fetchThreads = async () => {
@@ -606,14 +622,14 @@ const Conversation = () => {
           ) : (
             <div>
               {messages.map((message, index) => (
-                <Message
-                  key={message._id}
-                  message={message}
-                  isCurrentUser={message.sender._id === currentUser._id}
-                  showDate={shouldShowDate(message, index)}
-                  previousMessage={index > 0 ? messages[index - 1] : null}
-                />
-              ))}
+  <Message
+    key={message._id}
+    message={message}
+    isCurrentUser={message.sender._id === currentUser._id}
+    showDate={shouldShowDate(message, index)}
+    previousMessage={index > 0 ? messages[index - 1] : null}
+  />
+))}
               <div ref={messagesEndRef} />
             </div>
           )}

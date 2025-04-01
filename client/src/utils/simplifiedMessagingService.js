@@ -14,11 +14,13 @@ export const MessagingProvider = ({ children }) => {
   const [pollingInterval, setPollingInterval] = useState(null);
 
   // Fetch messages for the active thread
-  const fetchMessages = useCallback(async (threadId, page = 1) => {
+  const fetchMessages = useCallback(async (threadId, page = 1, showLoading = true) => {
     if (!threadId) return;
     
     try {
-      setIsLoading(true);
+      if (showLoading) {
+        setIsLoading(true);
+      }
       setError(null);
       
       const response = await api.get(`/messages/thread/${threadId}/messages?page=${page}`);
@@ -37,7 +39,9 @@ export const MessagingProvider = ({ children }) => {
       setError('Failed to load messages');
       return null;
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -59,10 +63,10 @@ export const MessagingProvider = ({ children }) => {
       // Fetch messages immediately
       fetchMessages(threadId);
       
-      // Then set up polling every 5 seconds
+      // Then set up polling every 3 seconds (reduced from 5 seconds)
       const interval = setInterval(() => {
         fetchMessages(threadId);
-      }, 5000);
+      }, 3000);
       
       setPollingInterval(interval);
     }
@@ -88,7 +92,14 @@ export const MessagingProvider = ({ children }) => {
       });
       
       // Add the new message to the current messages
-      setMessages(prev => [...prev, response.data]);
+      if (response.data) {
+        setMessages(prev => [...prev, response.data]);
+        
+        // Fetch messages right after sending to ensure consistency
+        setTimeout(() => {
+          fetchMessages(activeThreadId, 1, false);
+        }, 500);
+      }
       
       return response.data;
     } catch (err) {
@@ -96,7 +107,7 @@ export const MessagingProvider = ({ children }) => {
       setError('Failed to send message');
       return null;
     }
-  }, [activeThreadId]);
+  }, [activeThreadId, fetchMessages]);
 
   // Load more messages (pagination)
   const loadMoreMessages = useCallback(async (page) => {

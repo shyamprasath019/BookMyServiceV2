@@ -250,13 +250,14 @@ const OrderDetails = () => {
           _id: convResponse.data._id,
           threadId: orderThreadResponse.data._id
         });
-      } catch (error) {
+      } 
+      catch (error) {
         console.error('Error with conversation/thread:', error);
-        setError('Failed to get conversation for this order');
+        //setError('Failed to get conversation thread for this order');
       }
     } catch (err) {
       console.error('Error getting order conversation:', err);
-      setError('Failed to get conversation for this order');
+      //setError('Failed to get conversation for this order');
     } finally {
       setConversationLoading(false);
     }
