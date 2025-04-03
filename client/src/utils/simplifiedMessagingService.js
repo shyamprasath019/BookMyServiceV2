@@ -12,10 +12,12 @@ export const MessagingProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [pollingInterval, setPollingInterval] = useState(null);
+  const [totalPages, setTotalPages] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
 
   // Fetch messages for the active thread
   const fetchMessages = useCallback(async (threadId, page = 1, showLoading = true) => {
-    if (!threadId) return;
+    if (!threadId) return null;
     
     try {
       if (showLoading) {
@@ -25,15 +27,22 @@ export const MessagingProvider = ({ children }) => {
       
       const response = await api.get(`/messages/thread/${threadId}/messages?page=${page}`);
       
-      if (page === 1) {
-        // First page, replace all messages
-        setMessages(response.data.messages);
-      } else {
-        // Subsequent pages, prepend to existing messages
-        setMessages(prev => [...response.data.messages, ...prev]);
+      if (response.data) {
+        if (page === 1) {
+          // First page, replace all messages
+          setMessages(response.data.messages || []);
+        } else {
+          // Subsequent pages, prepend to existing messages
+          setMessages(prev => [...response.data.messages || [], ...prev]);
+        }
+        
+        // Set pagination info
+        setTotalPages(response.data.totalPages || 1);
+        setHasMore(page < (response.data.totalPages || 1));
+        
+        return response.data;
       }
-      
-      return response.data;
+      return null;
     } catch (err) {
       console.error('Error fetching messages:', err);
       setError('Failed to load messages');
@@ -52,6 +61,8 @@ export const MessagingProvider = ({ children }) => {
     
     // Clear existing messages when changing conversation/thread
     setMessages([]);
+    setTotalPages(1);
+    setHasMore(false);
     
     // Start polling for new messages
     if (threadId) {
@@ -63,9 +74,9 @@ export const MessagingProvider = ({ children }) => {
       // Fetch messages immediately
       fetchMessages(threadId);
       
-      // Then set up polling every 3 seconds (reduced from 5 seconds)
+      // Then set up polling every 3 seconds
       const interval = setInterval(() => {
-        fetchMessages(threadId);
+        fetchMessages(threadId, 1, false);
       }, 3000);
       
       setPollingInterval(interval);
@@ -83,7 +94,7 @@ export const MessagingProvider = ({ children }) => {
 
   // Send a message
   const sendMessage = useCallback(async (content, attachments = []) => {
-    if (!activeThreadId || !content.trim()) return null;
+    if (!activeThreadId || !content.trim() && attachments.length === 0) return null;
     
     try {
       const response = await api.post(`/messages/thread/${activeThreadId}`, {
@@ -112,7 +123,13 @@ export const MessagingProvider = ({ children }) => {
   // Load more messages (pagination)
   const loadMoreMessages = useCallback(async (page) => {
     if (!activeThreadId) return null;
-    return fetchMessages(activeThreadId, page);
+    
+    const result = await fetchMessages(activeThreadId, page);
+    if (result) {
+      setHasMore(page < result.totalPages);
+      return result;
+    }
+    return null;
   }, [activeThreadId, fetchMessages]);
 
   // Get or create a conversation thread
@@ -157,6 +174,8 @@ export const MessagingProvider = ({ children }) => {
     messages,
     isLoading,
     error,
+    hasMore,
+    totalPages,
     setActiveChat,
     sendMessage,
     loadMoreMessages,

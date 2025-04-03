@@ -4,8 +4,9 @@ import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { AuthContext } from '../context/AuthContext';
 import { useMessaging } from '../utils/simplifiedMessagingService';
 import api from '../utils/api';
+import ThreadList from '../components/ThreadList';
 
-// Helper components kept the same
+// Helper component for the conversation header
 const ConversationHeader = ({ conversation, otherParticipant, isLoading }) => {
   const navigate = useNavigate();
   
@@ -32,18 +33,18 @@ const ConversationHeader = ({ conversation, otherParticipant, isLoading }) => {
       };
     }
     
-    if (conversation.order.gig) {
+    if (conversation.order?.gig) {
       return {
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
         ),
         title: 'Gig Order'
       };
     }
     
-    if (conversation.order.job) {
+    if (conversation.order?.job) {
       return {
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -116,6 +117,7 @@ const ConversationHeader = ({ conversation, otherParticipant, isLoading }) => {
   );
 };
 
+// Message component
 const Message = ({ message, isCurrentUser, showDate, previousMessage }) => {
   // Determine if we should show sender name (when first message or different sender than previous)
   const showSenderName = !previousMessage || previousMessage.sender._id !== message.sender._id;
@@ -229,50 +231,10 @@ const Message = ({ message, isCurrentUser, showDate, previousMessage }) => {
   );
 };
 
-// Simple Thread List Component 
-const ThreadList = ({ conversationId, threads, activeThreadId, onThreadSelect, isLoading }) => {
-  if (isLoading) {
-    return (
-      <div className="p-2 bg-gray-100 border-b border-gray-200 overflow-x-auto">
-        <div className="animate-pulse flex space-x-2">
-          <div className="h-8 w-24 bg-gray-300 rounded"></div>
-          <div className="h-8 w-24 bg-gray-300 rounded"></div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!threads || threads.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="p-2 bg-gray-100 border-b border-gray-200 overflow-x-auto">
-      <div className="flex space-x-2">
-        {threads.map(thread => (
-          <button
-            key={thread._id}
-            onClick={() => onThreadSelect(thread._id)}
-            className={`px-3 py-1 rounded-full text-sm whitespace-nowrap ${
-              activeThreadId === thread._id
-                ? 'bg-blue-500 text-white'
-                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            {thread.type === 'general' ? 'General' :
-             thread.type === 'order' ? `Order: ${thread.order?.title?.substring(0, 10) || 'Order'}` :
-             thread.type === 'gig' ? `Gig: ${thread.gig?.title?.substring(0, 10) || 'Gig'}` :
-             thread.title || 'Thread'}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-};
-
+// Main Conversation component
 const Conversation = () => {
   const { id } = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { currentUser } = useContext(AuthContext);
   const navigate = useNavigate();
   
@@ -282,6 +244,8 @@ const Conversation = () => {
     isLoading: isLoadingMessages,
     error: messagingError,
     activeThreadId,
+    hasMore,
+    totalPages,
     setActiveChat,
     sendMessage,
     loadMoreMessages
@@ -301,7 +265,6 @@ const Conversation = () => {
   
   // Pagination
   const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
   
   // Refs
   const messagesEndRef = useRef(null);
@@ -329,22 +292,6 @@ const Conversation = () => {
     
     fetchConversation();
   }, [id]);
-
-  useEffect(() => {
-    // We need to use the fetchMessages from the messaging context
-    if (activeThreadId) {
-      // Initial load of messages
-      loadMoreMessages(1);
-      
-      // Set up polling every 3 seconds
-      const interval = setInterval(() => {
-        loadMoreMessages(1); // Use the loadMoreMessages from useMessaging context
-      }, 3000);
-      
-      // Clean up interval on unmount or when thread changes
-      return () => clearInterval(interval);
-    }
-  }, [activeThreadId, loadMoreMessages]);
 
   // Fetch threads when conversation is loaded
   useEffect(() => {
@@ -436,7 +383,6 @@ const Conversation = () => {
       
       if (result) {
         setPage(nextPage);
-        setHasMore(nextPage < result.totalPages);
       }
     }
   };
@@ -446,14 +392,13 @@ const Conversation = () => {
     // Update URL with the selected thread
     const newSearchParams = new URLSearchParams(searchParams);
     newSearchParams.set('thread', threadId);
-    navigate(`/messages/${id}?${newSearchParams.toString()}`);
+    setSearchParams(newSearchParams);
     
     // Set active thread in messaging context
     setActiveChat(id, threadId);
     
     // Reset pagination
     setPage(1);
-    setHasMore(false);
   };
   
   // Handle message input change
@@ -611,8 +556,9 @@ const Conversation = () => {
           {isLoading || isLoadingThreads ? (
             <div className="flex justify-center items-center h-full">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+              <p className="ml-2">Loading messages...</p>
             </div>
-          ) : messages.length === 0 ? (
+          ) : !messages || messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-500">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
@@ -622,14 +568,14 @@ const Conversation = () => {
           ) : (
             <div>
               {messages.map((message, index) => (
-  <Message
-    key={message._id}
-    message={message}
-    isCurrentUser={message.sender._id === currentUser._id}
-    showDate={shouldShowDate(message, index)}
-    previousMessage={index > 0 ? messages[index - 1] : null}
-  />
-))}
+                <Message
+                  key={message._id}
+                  message={message}
+                  isCurrentUser={message.sender._id === currentUser._id}
+                  showDate={shouldShowDate(message, index)}
+                  previousMessage={index > 0 ? messages[index - 1] : null}
+                />
+              ))}
               <div ref={messagesEndRef} />
             </div>
           )}

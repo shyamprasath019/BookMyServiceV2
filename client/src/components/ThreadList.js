@@ -35,20 +35,6 @@ const ThreadList = ({ conversationId, activeThreadId, onThreadSelect }) => {
     }
   };
 
-  const handleThreadSelect = (threadId) => {
-    // Update URL with the selected thread
-    const newSearchParams = new URLSearchParams(searchParams);
-    newSearchParams.set('thread', threadId);
-    navigate(`/messages/${id}?${newSearchParams.toString()}`);
-  
-    // Set active thread in messaging context
-    setActiveChat(id, threadId);
-  
-    // Reset pagination
-    setPage(1);
-    setHasMore(false);
-  };
-
   // Function to create a general thread if none exist
   const createGeneralThread = async () => {
     try {
