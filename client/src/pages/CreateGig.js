@@ -2,6 +2,8 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import FileUpload from '../components/FileUpload';
+import fileUploadService from '../utils/fileUploadService';
 import api from '../utils/api';
 
 const CreateGig = () => {
@@ -53,13 +55,13 @@ const CreateGig = () => {
     }
   };
   
-  const handleFileChange = (e) => {
-    // In a real implementation, this would handle file uploads
-    // For prototype, we'll just store the file names
-    const files = Array.from(e.target.files);
+  const [uploadedImages, setUploadedImages] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
+    
+  const handleImageChange = (files) => {
     setFormData({
       ...formData,
-      images: files.map(file => file.name)
+      images: files
     });
   };
   
@@ -69,6 +71,25 @@ const CreateGig = () => {
     setError('');
     
     try {
+      // Upload images first if there are any
+      let imageUrls = [];
+      if (formData.images && formData.images.length > 0) {
+        setIsUploading(true);
+        // Only upload files that are File objects (not string paths)
+        const filesToUpload = formData.images.filter(file => file instanceof File);
+        if (filesToUpload.length > 0) {
+          imageUrls = await fileUploadService.uploadFiles(filesToUpload, 'gigs');
+        }
+        
+        // Include any existing image paths
+        const existingImagePaths = formData.images
+          .filter(file => typeof file === 'string')
+          .map(path => path);
+        
+        imageUrls = [...existingImagePaths, ...imageUrls];
+        setIsUploading(false);
+      }
+      
       // Convert tags from string to array
       const tagsArray = formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag !== '');
       
@@ -77,10 +98,9 @@ const CreateGig = () => {
         ...formData,
         price: parseFloat(formData.price),
         deliveryTime: parseInt(formData.deliveryTime),
-        tags: tagsArray
+        tags: tagsArray,
+        images: imageUrls
       };
-      
-      // In a real implementation, you would handle image uploads here
       
       // Create gig
       const response = await api.post('/gigs', gigData);
@@ -90,6 +110,7 @@ const CreateGig = () => {
       setError(err.response?.data?.message || 'Failed to create gig');
     } finally {
       setIsLoading(false);
+      setIsUploading(false);
     }
   };
   
@@ -286,22 +307,21 @@ const CreateGig = () => {
         </div>
         
         <div className="mb-6">
-          <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="images">
-            Gig Images
-          </label>
-          <input
-            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-            type="file"
-            id="images"
-            name="images"
-            onChange={handleFileChange}
-            multiple
-            accept="image/*"
-          />
-          <p className="mt-1 text-sm text-gray-500">
-            Upload up to 5 high-quality images that showcase your service. (For prototype, files won't be uploaded)
-          </p>
-        </div>
+  <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="images">
+    Gig Images
+  </label>
+  <FileUpload
+    files={formData.images}
+    onChange={handleImageChange}
+    category="gigs"
+    acceptedTypes="image/*"
+    maxFiles={5}
+    multiple={true}
+  />
+  <p className="mt-1 text-sm text-gray-500">
+    Upload up to 5 high-quality images that showcase your service.
+  </p>
+</div>
         
         <div className="flex items-center justify-end mt-8">
           <button

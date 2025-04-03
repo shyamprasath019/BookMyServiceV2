@@ -2,6 +2,8 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import FileUpload from '../components/FileUpload';
+import fileUploadService from '../utils/fileUploadService';
 import api from '../utils/api';
 
 const CreateJob = () => {
@@ -33,7 +35,8 @@ const CreateJob = () => {
   const [images, setImages] = useState([]);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
+  const [isUploading, setIsUploading] = useState(false);
+
   // Categories
   const categories = [
     { id: 'technical', name: 'Technical Services', subCategories: ['Web Development', 'Mobile Apps', 'Software', 'IT Support'] },
@@ -93,21 +96,13 @@ const CreateJob = () => {
     });
   };
   
-  const handleImageChange = (e) => {
-    const files = Array.from(e.target.files);
-    
-    // For a real app, you would upload these to a server
-    // For this prototype, we'll just store the file objects
-    setImages(files);
-    
-    // Create array of file names for form data
-    const fileNames = files.map(file => file.name);
+  const handleAttachmentChange = (files) => {
     setFormData({
       ...formData,
-      attachments: fileNames
+      attachments: files
     });
   };
-  
+
   const validateForm = () => {
     // Title validation
     if (formData.title.trim().length < 10) {
@@ -150,42 +145,60 @@ const CreateJob = () => {
   };
   
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
+  e.preventDefault();
+  
+  if (!validateForm()) {
+    return;
+  }
+  
+  setIsLoading(true);
+  setError('');
+  
+  try {
+    // Upload attachments first if there are any
+    let attachmentUrls = [];
+    if (formData.attachments && formData.attachments.length > 0) {
+      setIsUploading(true);
+      // Only upload files that are File objects (not string paths)
+      const filesToUpload = formData.attachments.filter(file => file instanceof File);
+      if (filesToUpload.length > 0) {
+        attachmentUrls = await fileUploadService.uploadFiles(filesToUpload, 'jobs');
+      }
+      
+      // Include any existing attachment paths
+      const existingAttachmentPaths = formData.attachments
+        .filter(file => typeof file === 'string')
+        .map(path => path);
+      
+      attachmentUrls = [...existingAttachmentPaths, ...attachmentUrls];
+      setIsUploading(false);
     }
     
-    setIsLoading(true);
-    setError('');
+    // Convert skills from string to array
+    const skillsArray = formData.skills.split(',').map(skill => skill.trim()).filter(skill => skill !== '');
     
-    try {
-      // Convert skills from string to array
-      const skillsArray = formData.skills.split(',').map(skill => skill.trim()).filter(skill => skill !== '');
-      
-      // Prepare job data
-      const jobData = {
-        ...formData,
-        budget: {
-          min: parseFloat(formData.budget.min),
-          max: parseFloat(formData.budget.max)
-        },
-        skills: skillsArray
-      };
-      
-      // For a real app, you would handle file uploads here
-      // For this prototype, we'll just send the job data
-      
-      // Create job
-      const response = await api.post('/jobs', jobData);
-      
-      navigate(`/jobs/${response.data._id}`);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create job');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    // Prepare job data
+    const jobData = {
+      ...formData,
+      budget: {
+        min: parseFloat(formData.budget.min),
+        max: parseFloat(formData.budget.max)
+      },
+      skills: skillsArray,
+      attachments: attachmentUrls
+    };
+    
+    // Create job
+    const response = await api.post('/jobs', jobData);
+    
+    navigate(`/jobs/${response.data._id}`);
+  } catch (err) {
+    setError(err.response?.data?.message || 'Failed to create job');
+  } finally {
+    setIsLoading(false);
+    setIsUploading(false);
+  }
+};
   
   // Check if user is client
   if (activeRole !== 'client') {
@@ -485,23 +498,22 @@ const CreateJob = () => {
         </div>
         
         <div className="mb-6">
-          <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="images">
+          <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="attachments">
             Attachments / Images
           </label>
-          <input
-            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-            type="file"
-            id="images"
-            name="images"
-            onChange={handleImageChange}
-            accept="image/*"
-            multiple
+          <FileUpload
+            files={formData.attachments}
+            onChange={handleAttachmentChange}
+            category="jobs"
+            acceptedTypes="image/*,.pdf,.doc,.docx"
+            maxFiles={5}
+            multiple={true}
           />
           <p className="mt-1 text-sm text-gray-500">
-            Upload images to help describe your job (optional). Maximum 5 images, 5MB each.
+            Upload images or documents to help describe your job (optional). Maximum 5 files, 5MB each.
           </p>
           
-          {/* Image preview */}
+          {/* Image preview
           {images.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
               {images.map((file, index) => (
@@ -514,7 +526,7 @@ const CreateJob = () => {
                 </div>
               ))}
             </div>
-          )}
+          )} */}
         </div>
         
         <div className="flex items-center justify-end mt-8">

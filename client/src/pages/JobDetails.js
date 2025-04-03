@@ -246,7 +246,7 @@ const JobDetails = () => {
                 {job.attachments.map((attachment, index) => (
                   <div key={index} className="border rounded overflow-hidden">
                     <img
-                      src={`/src/assets/uploads/jobs/${attachment}`}
+                      src={`/src/${attachment}`}
                       alt={`Attachment ${index + 1}`}
                       className="w-full h-32 object-cover"
                     />
