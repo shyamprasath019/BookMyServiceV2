@@ -5,237 +5,158 @@ const path = require('path');
 const fs = require('fs');
 const { verifyToken } = require('../middleware/auth');
 
-// Create directory structure if it doesn't exist
-const createDirIfNotExists = (dir) => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-};
-
-// Initialize directories
-const uploadsBaseDir = path.join(__dirname, '../uploads');
-const profileDir = path.join(uploadsBaseDir, 'profile');
-const gigsDir = path.join(uploadsBaseDir, 'gigs');
-const jobsDir = path.join(uploadsBaseDir, 'jobs');
-const messagesDir = path.join(uploadsBaseDir, 'messages');
-const deliveriesDir = path.join(uploadsBaseDir, 'deliveries');
-
-[uploadsBaseDir, profileDir, gigsDir, jobsDir, messagesDir, deliveriesDir].forEach(createDirIfNotExists);
-
-// Storage configuration for different upload types
-const createStorage = (destination) => {
-  return multer.diskStorage({
-    destination: (req, file, cb) => {
-      // Get user ID for user-specific folders
-      const userId = req.user.id;
-      const userFolder = path.join(destination, userId);
-      createDirIfNotExists(userFolder);
-      cb(null, userFolder);
-    },
-    filename: (req, file, cb) => {
-      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-      const ext = path.extname(file.originalname);
-      cb(null, uniqueSuffix + ext);
+// Create directories for file storage
+const assetsDir = path.join(__dirname, '../../client/src/assets');
+const imagesDir = path.join(assetsDir, 'images');
+const createNeededDirs = () => {
+  const dirs = [
+    assetsDir, 
+    imagesDir,
+    path.join(imagesDir, 'gigs'),
+    path.join(imagesDir, 'jobs'),
+    path.join(imagesDir, 'profile'),
+    path.join(imagesDir, 'messages'),
+  ];
+  
+  dirs.forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
   });
 };
 
-// File filter for images
-const imageFileFilter = (req, file, cb) => {
-  const allowedTypes = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-  const ext = path.extname(file.originalname).toLowerCase();
+// Ensure directories exist
+createNeededDirs();
+
+// Set up storage configuration
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const { category, id } = req.body;
+    
+    // Create user-specific directory
+    let uploadDir = path.join(imagesDir, category || 'misc');
+    
+    // Add ID-based subdirectory if provided
+    if (id && id !== 'new') {
+      uploadDir = path.join(uploadDir, id);
+    }
+    
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    // Create a safe filename with timestamp to avoid collisions
+    const timestamp = Date.now();
+    const originalName = file.originalname;
+    const safeName = originalName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${timestamp}-${safeName}`);
+  }
+});
+
+// File filter to check allowed file types
+const fileFilter = (req, file, cb) => {
+  // Define allowed file types based on category
+  const allowedTypes = {
+    'profile': ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+    'gigs': ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+    'jobs': ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'application/msword'],
+    'messages': ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'],
+    'default': ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+  };
   
-  if (allowedTypes.includes(ext)) {
+  const category = req.body.category || 'default';
+  const allowed = allowedTypes[category] || allowedTypes.default;
+  
+  if (allowed.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Only image files are allowed'), false);
+    cb(new Error(`File type not allowed. Allowed types: ${allowed.join(', ')}`));
   }
 };
 
-// General file filter
-const generalFileFilter = (req, file, cb) => {
-  const allowedTypes = [
-    // Images
-    '.jpg', '.jpeg', '.png', '.gif', '.webp',
-    // Documents
-    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt',
-    // Archives
-    '.zip', '.rar', '.7z',
-    // Other
-    '.csv', '.json'
-  ];
+// Configure multer with our storage and file filter
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
+
+// Route for single file upload
+router.post('/file', verifyToken, upload.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: 'No file uploaded' });
+  }
   
-  const ext = path.extname(file.originalname).toLowerCase();
-  const fileSizeLimit = 5 * 1024 * 1024; // 5MB
+  // Get the path relative to the client/src directory
+  const relativePath = path.relative(
+    path.join(__dirname, '../../client/src'),
+    req.file.path
+  ).replace(/\\/g, '/');
   
-  if (allowedTypes.includes(ext)) {
-    cb(null, true);
-  } else {
-    cb(new Error(`File type not allowed. Allowed types: ${allowedTypes.join(', ')}`), false);
-  }
-};
-
-// Configure multer instances for different upload types
-const profileImageUpload = multer({
-  storage: createStorage(profileDir),
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB max
-  fileFilter: imageFileFilter
+  res.status(200).json({
+    success: true,
+    message: 'File uploaded successfully',
+    filePath: relativePath
+  });
 });
 
-const gigImagesUpload = multer({
-  storage: createStorage(gigsDir),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
-  fileFilter: imageFileFilter
+// Route for multiple file uploads
+router.post('/files', verifyToken, upload.array('files', 10), (req, res) => {
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ success: false, message: 'No files uploaded' });
+  }
+  
+  // Get paths relative to the client/src directory
+  const relativePaths = req.files.map(file => {
+    return path.relative(
+      path.join(__dirname, '../../client/src'),
+      file.path
+    ).replace(/\\/g, '/');
+  });
+  
+  res.status(200).json({
+    success: true,
+    message: `${req.files.length} files uploaded successfully`,
+    filePaths: relativePaths
+  });
 });
 
-const jobAttachmentsUpload = multer({
-  storage: createStorage(jobsDir),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
-  fileFilter: generalFileFilter
+// Route to delete a file
+router.delete('/file', verifyToken, (req, res) => {
+  const { filePath } = req.body;
+  
+  if (!filePath) {
+    return res.status(400).json({ success: false, message: 'No file path provided' });
+  }
+  
+  // Ensure the path is within our assets directory for security
+  const fullPath = path.join(__dirname, '../../client/src', filePath);
+  const assetsPath = path.resolve(assetsDir);
+  
+  if (!fullPath.startsWith(assetsPath)) {
+    return res.status(403).json({ 
+      success: false, 
+      message: 'Access denied: Cannot delete files outside of assets directory' 
+    });
+  }
+  
+  try {
+    if (fs.existsSync(fullPath)) {
+      fs.unlinkSync(fullPath);
+      res.status(200).json({ success: true, message: 'File deleted successfully' });
+    } else {
+      res.status(404).json({ success: false, message: 'File not found' });
+    }
+  } catch (error) {
+    console.error('Error deleting file:', error);
+    res.status(500).json({ success: false, message: 'Error deleting file' });
+  }
 });
-
-const messageAttachmentsUpload = multer({
-  storage: createStorage(messagesDir),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
-  fileFilter: generalFileFilter
-});
-
-const deliveryAttachmentsUpload = multer({
-  storage: createStorage(deliveriesDir),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
-  fileFilter: generalFileFilter
-});
-
-// Error handler middleware
-const handleMulterError = (err, req, res, next) => {
-  if (err instanceof multer.MulterError) {
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ 
-        message: 'File too large. Maximum file size allowed: 5MB' 
-      });
-    }
-    return res.status(400).json({ message: err.message });
-  } else if (err) {
-    return res.status(400).json({ message: err.message });
-  }
-  next();
-};
-
-// ===== Profile Image Upload =====
-router.post('/profile-image', 
-  verifyToken, 
-  profileImageUpload.single('profileImage'),
-  handleMulterError,
-  (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({ message: 'No file uploaded' });
-    }
-    
-    // Construct URL path to the file
-    const relativePath = path.relative(uploadsBaseDir, req.file.path).replace(/\\/g, '/');
-    const imageUrl = `/uploads/${relativePath}`;
-    
-    res.status(200).json({ 
-      message: 'Profile image uploaded successfully',
-      profileImage: imageUrl
-    });
-  }
-);
-
-// ===== Gig Images Upload =====
-router.post('/gig-images', 
-  verifyToken, 
-  gigImagesUpload.array('gigImages', 5), // Max 5 images
-  handleMulterError,
-  (req, res) => {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ message: 'No files uploaded' });
-    }
-    
-    // Construct URL paths to the files
-    const imageUrls = req.files.map(file => {
-      const relativePath = path.relative(uploadsBaseDir, file.path).replace(/\\/g, '/');
-      return `/uploads/${relativePath}`;
-    });
-    
-    res.status(200).json({ 
-      message: `${req.files.length} image(s) uploaded successfully`,
-      imageUrls
-    });
-  }
-);
-
-// ===== Job Attachments Upload =====
-router.post('/job-attachments', 
-  verifyToken, 
-  jobAttachmentsUpload.array('jobAttachments', 5), // Max 5 files
-  handleMulterError,
-  (req, res) => {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ message: 'No files uploaded' });
-    }
-    
-    // Construct URL paths to the files
-    const attachmentUrls = req.files.map(file => {
-      const relativePath = path.relative(uploadsBaseDir, file.path).replace(/\\/g, '/');
-      return `/uploads/${relativePath}`;
-    });
-    
-    res.status(200).json({ 
-      message: `${req.files.length} attachment(s) uploaded successfully`,
-      attachmentUrls
-    });
-  }
-);
-
-// ===== Message Attachments Upload =====
-router.post('/message-attachments', 
-  verifyToken, 
-  messageAttachmentsUpload.array('messageAttachments', 5), // Max 5 files
-  handleMulterError,
-  (req, res) => {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ message: 'No files uploaded' });
-    }
-    
-    // Construct URL paths to the files
-    const attachmentUrls = req.files.map(file => {
-      const relativePath = path.relative(uploadsBaseDir, file.path).replace(/\\/g, '/');
-      return `/uploads/${relativePath}`;
-    });
-    
-    res.status(200).json({ 
-      message: `${req.files.length} attachment(s) uploaded successfully`,
-      attachmentUrls
-    });
-  }
-);
-
-// ===== Delivery Attachments Upload =====
-router.post('/delivery-attachments', 
-  verifyToken, 
-  deliveryAttachmentsUpload.array('deliveryAttachments', 10), // Max 10 files
-  handleMulterError,
-  (req, res) => {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ message: 'No files uploaded' });
-    }
-    
-    // Construct URL paths to the files
-    const deliveryUrls = req.files.map(file => {
-      const relativePath = path.relative(uploadsBaseDir, file.path).replace(/\\/g, '/');
-      return `/uploads/${relativePath}`;
-    });
-    
-    res.status(200).json({ 
-      message: `${req.files.length} attachment(s) uploaded successfully`,
-      deliveryUrls
-    });
-  }
-);
-
-// Serve static files from uploads directory
-// This route should be added to the main server.js file:
-// app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 module.exports = router;

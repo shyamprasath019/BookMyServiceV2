@@ -64,24 +64,12 @@ export const MessagingProvider = ({ children }) => {
     setTotalPages(1);
     setHasMore(false);
     
-    // Start polling for new messages
-    if (threadId) {
-      // Clear any existing polling interval
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-      }
-      
-      // Fetch messages immediately
-      fetchMessages(threadId);
-      
-      // Then set up polling every 3 seconds
-      const interval = setInterval(() => {
-        fetchMessages(threadId, 1, false);
-      }, 3000);
-      
-      setPollingInterval(interval);
+    // Clear any existing polling interval
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      setPollingInterval(null);
     }
-  }, [fetchMessages, pollingInterval]);
+  }, [pollingInterval]);
 
   // Clean up polling when component unmounts
   useEffect(() => {
@@ -158,14 +146,24 @@ export const MessagingProvider = ({ children }) => {
 
   // Clean up when changing conversations
   useEffect(() => {
-    return () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-      }
-      setActiveThreadId(null);
-      setMessages([]);
-    };
-  }, [activeConversationId]);
+    // When activeThreadId changes, fetch messages right away
+    if (activeThreadId) {
+      fetchMessages(activeThreadId);
+      
+      // Set up polling for new messages
+      const interval = setInterval(() => {
+        fetchMessages(activeThreadId, 1, false);
+      }, 3000);
+      
+      setPollingInterval(interval);
+      
+      return () => {
+        if (pollingInterval) {
+          clearInterval(pollingInterval);
+        }
+      };
+    }
+  }, [activeThreadId, fetchMessages]);
 
   // Context value
   const value = {
